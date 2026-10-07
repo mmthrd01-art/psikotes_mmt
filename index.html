@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Psikotes Rekrutmen | CV. Mitra Multi Teknik</title>
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'] },
+          colors: {
+            navy: { 900: '#0b2342', 800: '#10305c', 700: '#163f78' },
+            brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#2563eb', 600: '#1d4ed8', 700: '#1e40af' },
+            accent: { 50: '#fff7ed', 100: '#ffedd5', 400: '#fb923c', 500: '#f97316', 600: '#ea580c' }
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    body { background: #f3f6fb; }
+    /* Pola blueprint pada header & layar Kraepelin */
+    .blueprint {
+      background-color: #0b2342;
+      background-image:
+        linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    .star-off { filter: grayscale(1); opacity: .25; }
+    .num-big { font-variant-numeric: tabular-nums; letter-spacing: .05em; }
+    .key-btn:active { transform: scale(.95); }
+    .flash-ok { animation: flashOk .35s ease-out; }
+    .flash-bad { animation: flashBad .35s ease-out; }
+    @keyframes flashOk { 0% { background-color: #bbf7d0; } 100% { background-color: transparent; } }
+    @keyframes flashBad { 0% { background-color: #fecaca; } 100% { background-color: transparent; } }
+    :focus-visible { outline: 3px solid #f97316; outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) {
+      .flash-ok, .flash-bad { animation: none; }
+    }
+  </style>
+</head>
+
+<body class="font-sans text-slate-800 min-h-screen">
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="blueprint text-white">
+    <div class="max-w-6xl mx-auto px-4 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-lg bg-accent-500 flex items-center justify-center font-extrabold text-navy-900 text-lg">MT</div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-extrabold leading-tight">CV. Mitra Multi Teknik</h1>
+          <p class="text-blue-200 text-sm">Sistem Psikotes Rekrutmen Internal</p>
+        </div>
+      </div>
+      <nav class="flex gap-1 bg-navy-800/80 p-1 rounded-lg self-start sm:self-auto" role="tablist">
+        <button id="tab-peserta" role="tab" onclick="app.showTab('peserta')" class="px-4 py-2 rounded-md text-sm font-semibold transition">Peserta</button>
+        <button id="tab-admin" role="tab" onclick="app.showTab('admin')" class="px-4 py-2 rounded-md text-sm font-semibold transition">Admin</button>
+      </nav>
+    </div>
+    <div id="mode-banner" class="hidden bg-accent-500 text-navy-900 text-xs sm:text-sm font-semibold text-center px-4 py-1.5"></div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6 sm:py-10">
+    <section id="view-peserta"><div id="peserta-root"></div></section>
+    <section id="view-admin" class="hidden"><div id="admin-root"></div></section>
+  </main>
+
+  <footer class="text-center text-xs text-slate-400 pb-8">
+    &copy; <span id="year"></span> CV. Mitra Multi Teknik &mdash; Hanya untuk keperluan rekrutmen internal
+  </footer>
+
+  <!-- ===================== SCRIPT UTAMA ===================== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
+    import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+    /* =====================================================================
+       1. KONFIGURASI FIREBASE (data disimpan di Cloud Firestore, koleksi "kandidat")
+       ===================================================================== */
+    const firebaseConfig = {
+      apiKey: "AIzaSyCVvthpy8ooLt8pBJ06iJADlnmeqisMjbI",
+      authDomain: "tes-psiko-mmt.firebaseapp.com",
+      projectId: "tes-psiko-mmt",
+      storageBucket: "tes-psiko-mmt.firebasestorage.app",
+      messagingSenderId: "334018557380",
+      appId: "1:334018557380:web:f36df7d2e1a25776336091",
+      measurementId: "G-L1Q2M6CZTX"
+    };
+
+    /* Password pembatas tampilan tab Admin (bukan keamanan sebenarnya; gunakan Firebase Auth + Rules untuk produksi). */
+    const ADMIN_PASSWORD = "admin123";
+    const KRAEPELIN_DURATION = 60;   // detik
+    const COLLECTION = "kandidat";
+    const LOCAL_KEY = "mmt_kandidat_demo";
+
+    let db = null;
+    try {
+      const fbApp = initializeApp(firebaseConfig);
+      db = getFirestore(fbApp);
+      try { getAnalytics(fbApp); } catch (e) { console.warn("Analytics tidak aktif:", e); }
+    } catch (e) {
+      console.error("Gagal inisialisasi Firebase:", e);
+    }
+    const useFirebase = !!db;
+
+    /* ---------- Lapisan data: Firestore, dengan cadangan localStorage (mode demo) ---------- */
+    const localListeners = [];
+    function readLocal() {
+      try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || "{}"); } catch { return {}; }
+    }
+    function writeLocal(obj) {
+      try { localStorage.setItem(LOCAL_KEY, JSON.stringify(obj)); } catch (e) { console.warn(e); }
+      localListeners.forEach(cb => cb(obj));
+    }
+
+    async function saveCandidate(data) {
+      if (useFirebase) {
+        await addDoc(collection(db, COLLECTION), data);
+      } else {
+        const all = readLocal();
+        all["demo_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7)] = data;
+        writeLocal(all);
+      }
+    }
+
+    function listenCandidates(onData, onError) {
+      if (useFirebase) {
+        onSnapshot(collection(db, COLLECTION), snap => {
+          const o = {}; snap.forEach(d => { o[d.id] = d.data(); }); onData(o);
+        }, err => onError && onError(err));
+      } else {
+        localListeners.push(onData);
+        window.addEventListener("storage", () => onData(readLocal()));
+        onData(readLocal());
+      }
+    }
+
+    async function deleteCandidate(id) {
+      if (useFirebase) {
+        await deleteDoc(doc(db, COLLECTION, id));
+      } else {
+        const all = readLocal();
+        delete all[id];
+        writeLocal(all);
+      }
+    }
+
+    /* =====================================================================
+       3. DATA SOAL DISC (Most / Least)
+       D = Dominance, I = Influence, S = Steadiness, C = Compliance
+       ===================================================================== */
+    const DISC_QUESTIONS = [
+      { q: "Ketika menghadapi masalah di lapangan atau kantor, saya cenderung...", opts: [
+        { k: "D", t: "Langsung mengambil keputusan dan bertindak cepat" },
+        { k: "I", t: "Mengajak orang lain berdiskusi untuk mencari ide" },
+        { k: "S", t: "Tetap tenang dan menyelesaikannya langkah demi langkah" },
+        { k: "C", t: "Menganalisis data dan penyebabnya terlebih dahulu" } ] },
+      { q: "Dalam sebuah tim, orang lain biasanya melihat saya sebagai orang yang...", opts: [
+        { k: "D", t: "Tegas dan berorientasi pada hasil" },
+        { k: "I", t: "Ramah, ceria, dan mudah bergaul" },
+        { k: "S", t: "Sabar, setia, dan bisa diandalkan" },
+        { k: "C", t: "Cermat, rapi, dan teliti" } ] },
+      { q: "Saat ada perubahan prosedur kerja secara mendadak, saya...", opts: [
+        { k: "D", t: "Menyambutnya sebagai tantangan dan segera memimpin penyesuaian" },
+        { k: "I", t: "Antusias dan membantu rekan lain agar tetap semangat" },
+        { k: "S", t: "Butuh waktu untuk menyesuaikan dan lebih suka kondisi stabil" },
+        { k: "C", t: "Meminta penjelasan detail dan aturan yang jelas" } ] },
+      { q: "Pekerjaan yang paling saya nikmati adalah...", opts: [
+        { k: "D", t: "Pekerjaan dengan target besar dan wewenang untuk memutuskan" },
+        { k: "I", t: "Pekerjaan yang banyak berinteraksi dan berkomunikasi dengan orang" },
+        { k: "S", t: "Pekerjaan rutin yang teratur dan suasana kerja harmonis" },
+        { k: "C", t: "Pekerjaan yang menuntut akurasi, standar, dan ketelitian tinggi" } ] },
+      { q: "Ketika berbeda pendapat dengan rekan kerja, saya biasanya...", opts: [
+        { k: "D", t: "Mempertahankan pendapat dan berbicara terus terang" },
+        { k: "I", t: "Mencairkan suasana dengan pendekatan yang santai" },
+        { k: "S", t: "Mengalah demi menjaga hubungan baik" },
+        { k: "C", t: "Menyodorkan fakta dan dokumen sebagai dasar argumen" } ] },
+      { q: "Saat bekerja di bawah tekanan tenggat waktu, saya...", opts: [
+        { k: "D", t: "Semakin fokus mengejar hasil dan menekan tim bila perlu" },
+        { k: "I", t: "Menjaga mood tim agar tetap positif" },
+        { k: "S", t: "Bekerja konsisten tanpa banyak mengeluh" },
+        { k: "C", t: "Membuat daftar periksa agar tidak ada yang terlewat" } ] },
+      { q: "Hal yang paling membuat saya tidak nyaman adalah...", opts: [
+        { k: "D", t: "Dikendalikan atau pekerjaan yang lambat tanpa hasil" },
+        { k: "I", t: "Bekerja sendirian dalam waktu lama tanpa interaksi" },
+        { k: "S", t: "Konflik terbuka dan perubahan yang terlalu cepat" },
+        { k: "C", t: "Pekerjaan yang asal-asalan dan penuh kesalahan" } ] },
+      { q: "Cara saya menyampaikan informasi kepada atasan atau rekan adalah...", opts: [
+        { k: "D", t: "Singkat, langsung ke inti, dan fokus pada solusi" },
+        { k: "I", t: "Penuh semangat, bercerita, dan meyakinkan" },
+        { k: "S", t: "Pelan, sopan, dan menjadi pendengar yang baik" },
+        { k: "C", t: "Terstruktur, lengkap dengan angka dan bukti" } ] },
+      { q: "Kekuatan terbesar saya dalam pekerjaan adalah...", opts: [
+        { k: "D", t: "Keberanian mengambil risiko dan memimpin" },
+        { k: "I", t: "Kemampuan membangun relasi dan memotivasi orang" },
+        { k: "S", t: "Loyalitas, kesabaran, dan kerja sama tim" },
+        { k: "C", t: "Ketepatan, kedisiplinan, dan kontrol kualitas" } ] },
+      { q: "Ketika diberi tugas baru yang belum pernah saya kerjakan, saya...", opts: [
+        { k: "D", t: "Langsung mencoba dan belajar sambil berjalan" },
+        { k: "I", t: "Bertanya ke banyak orang dan berbagi pengalaman" },
+        { k: "S", t: "Meminta bimbingan dan mengerjakannya dengan hati-hati" },
+        { k: "C", t: "Membaca panduan atau SOP sampai paham betul" } ] },
+      { q: "Saat rapat tim, biasanya saya...", opts: [
+        { k: "D", t: "Mengarahkan pembahasan agar cepat menghasilkan keputusan" },
+        { k: "I", t: "Aktif berbicara dan menyumbang ide-ide baru" },
+        { k: "S", t: "Mendengarkan dan memastikan semua orang merasa dihargai" },
+        { k: "C", t: "Mencatat poin penting dan mengoreksi detail yang keliru" } ] },
+      { q: "Jika menemukan kesalahan dalam hasil kerja rekan, saya...", opts: [
+        { k: "D", t: "Menyampaikannya langsung agar segera diperbaiki" },
+        { k: "I", t: "Menegurnya dengan candaan supaya tidak tersinggung" },
+        { k: "S", t: "Membantu memperbaikinya tanpa membuat suasana tegang" },
+        { k: "C", t: "Menunjukkan letak kesalahan lengkap dengan buktinya" } ] },
+      { q: "Lingkungan kerja yang ideal bagi saya adalah...", opts: [
+        { k: "D", t: "Dinamis, penuh tantangan, dan berorientasi target" },
+        { k: "I", t: "Terbuka, santai, dan penuh kerja sama" },
+        { k: "S", t: "Tenang, stabil, dan saling mendukung" },
+        { k: "C", t: "Tertata, jelas aturannya, dan profesional" } ] },
+      { q: "Ketika harus mengambil keputusan penting, saya...", opts: [
+        { k: "D", t: "Memutuskan sendiri dengan cepat dan siap menanggung risikonya" },
+        { k: "I", t: "Meminta pendapat orang lain dan mengikuti perasaan yang positif" },
+        { k: "S", t: "Mempertimbangkan dampaknya pada semua orang sebelum memutuskan" },
+        { k: "C", t: "Mengumpulkan data lengkap dan membandingkan semua pilihan" } ] },
+      { q: "Rekan kerja biasanya datang kepada saya untuk...", opts: [
+        { k: "D", t: "Meminta arahan dan keputusan yang tegas" },
+        { k: "I", t: "Mencari semangat, hiburan, atau dukungan moral" },
+        { k: "S", t: "Bercerita dan meminta bantuan karena saya mau mendengarkan" },
+        { k: "C", t: "Memeriksa ulang pekerjaan atau menanyakan aturan yang benar" } ] },
+      { q: "Saat target kerja tidak tercapai, reaksi pertama saya adalah...", opts: [
+        { k: "D", t: "Mencari cara baru yang lebih agresif untuk mengejar target" },
+        { k: "I", t: "Menyemangati tim dan mencari dukungan dari pihak lain" },
+        { k: "S", t: "Bertahan, tetap bekerja, dan memperbaiki secara bertahap" },
+        { k: "C", t: "Mengevaluasi proses untuk menemukan sumber kesalahannya" } ] },
+      { q: "Cara saya mengatur pekerjaan sehari-hari adalah...", opts: [
+        { k: "D", t: "Mengerjakan yang paling penting dan mendesak terlebih dahulu" },
+        { k: "I", t: "Mengikuti suasana hati dan peluang yang muncul hari itu" },
+        { k: "S", t: "Mengikuti rutinitas yang sudah biasa saya jalani" },
+        { k: "C", t: "Membuat jadwal dan daftar tugas yang rinci" } ] },
+      { q: "Ketika bertemu klien atau orang baru, saya...", opts: [
+        { k: "D", t: "Langsung membahas inti kebutuhan dan tujuan" },
+        { k: "I", t: "Mudah akrab dan cepat mencairkan suasana" },
+        { k: "S", t: "Bersikap sopan, hangat, dan menyimak dulu" },
+        { k: "C", t: "Berhati-hati, formal, dan menyiapkan informasi yang akurat" } ] },
+      { q: "Kritik dari atasan paling sering saya tanggapi dengan...", opts: [
+        { k: "D", t: "Membela diri jika saya merasa benar, lalu langsung bertindak" },
+        { k: "I", t: "Merasa kecewa sesaat, namun cepat bangkit dan optimis lagi" },
+        { k: "S", t: "Menerimanya dengan tenang walau diam-diam memikirkannya lama" },
+        { k: "C", t: "Mencatatnya dan memastikan kesalahan yang sama tidak terulang" } ] },
+      { q: "Jika harus memilih, saya lebih menghargai rekan kerja yang...", opts: [
+        { k: "D", t: "Berani, cepat, dan menyelesaikan target" },
+        { k: "I", t: "Menyenangkan dan mampu menggerakkan suasana" },
+        { k: "S", t: "Dapat dipercaya dan tidak mudah berubah-ubah" },
+        { k: "C", t: "Teliti dan tidak pernah salah dalam detail" } ] },
+      { q: "Ketika pekerjaan saya terganggu oleh hal tak terduga, saya...", opts: [
+        { k: "D", t: "Segera mengatasi gangguan itu dan melanjutkan pekerjaan" },
+        { k: "I", t: "Menganggapnya biasa dan mencari sisi serunya" },
+        { k: "S", t: "Berusaha tetap tenang dan kembali ke ritme semula" },
+        { k: "C", t: "Merasa terganggu karena rencana awal menjadi berantakan" } ] }
+    ];
+
+    /* Jumlah soal DISC yang diterima setiap peserta (diambil acak dari bank soal di atas).
+       Boleh diubah selama tidak melebihi jumlah soal di DISC_QUESTIONS. */
+    const DISC_PER_TEST = 6, DISC_ADJ_N = 5;   // 6 soal pernyataan + 5 soal kata sifat
+
+    /* =====================================================================
+       3b. BANK SOAL TES 3 (KOGNITIF / LOGIKA / SITUASIONAL) PER POSISI
+       - tipe "iq" / "detail": opsi benar p = 1, lainnya p = 0
+       - tipe "sjt": setiap opsi punya bobot p = 1 sampai 4 (4 = paling tepat)
+       - bagian: soal diacak hanya di dalam bagiannya (bagian 1 dulu, lalu bagian 2)
+       - extra: HTML tambahan (daftar, tabel); tail: kalimat pertanyaan setelah extra
+       ===================================================================== */
+    const ul = items => `<ul class="mt-3 space-y-2 text-slate-700 list-disc pl-5">${items.map(i => `<li>${i}</li>`).join("")}</ul>`;
+    const ol = items => `<ol class="mt-3 space-y-2 text-slate-700 list-decimal pl-5">${items.map(i => `<li>${i}</li>`).join("")}</ol>`;
+    const seq = txt => `<div class="mt-3 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 font-mono text-lg font-bold text-navy-900 tracking-wide overflow-x-auto whitespace-nowrap">${txt}</div>`;
+    const cmpTable = rows => `<div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+      <table class="w-full text-left text-xs sm:text-sm font-mono">
+        <thead class="bg-slate-100 text-slate-600 font-sans"><tr><th class="px-3 py-2 font-semibold">No</th><th class="px-3 py-2 font-semibold">Master Data (kiri)</th><th class="px-3 py-2 font-semibold">Input Sistem (kanan)</th></tr></thead>
+        <tbody class="divide-y divide-slate-100">${rows.map((r, i) => `<tr><td class="px-3 py-2 font-sans">${i + 1}</td><td class="px-3 py-2 whitespace-nowrap">${r[0]}</td><td class="px-3 py-2 whitespace-nowrap">${r[1]}</td></tr>`).join("")}</tbody>
+      </table></div>`;
+    const o = (t, p) => ({ t, p });
+
+    const COG_BANKS = {
+      Accounting: {
+        judul: "Logika Numerik & Ketelitian Data",
+        intro: "Ada 5 soal pilihan ganda: logika angka dan pencocokan data. Hitung dan periksa dengan teliti. Anda boleh memakai kertas coretan.",
+        questions: [
+          { tipe: "iq", bagian: 1, bag: "Logika numerik",
+            q: "Tentukan angka berikutnya dari deret berikut.",
+            extra: seq("7 | 11 | 20 | 36 | 61 | ..."),
+            opts: [o("86", 0), o("97", 1), o("104", 0), o("112", 0)] },
+          { tipe: "iq", bagian: 1, bag: "Logika numerik",
+            q: "Sebuah vendor memberi diskon bertingkat kepada CV. Mitra Multi Teknik. Pembelian di atas 100 unit mendapat diskon 10%. Jika dibayar tunai, ada tambahan diskon 5% dari harga setelah diskon pertama. Harga awal Rp 200.000 per unit dan perusahaan membeli 150 unit secara tunai. Seorang akuntan keliru menghitung dengan menjumlahkan kedua diskon menjadi 15% dari harga awal.",
+            tail: "Berapa selisih antara total bayar yang benar dan hasil hitungan akuntan tersebut?",
+            opts: [o("Rp 150.000", 1), o("Rp 225.000", 0), o("Rp 300.000", 0), o("Rp 450.000", 0)] },
+          { tipe: "iq", bagian: 1, bag: "Penalaran analitis",
+            q: "Seorang akuntan harus merekonsiliasi 4 akun (Vendor A, B, C, dan D), satu per satu, dengan ketentuan berikut.",
+            extra: ul(["Vendor A harus diselesaikan sebelum Vendor C.", "Vendor B tidak boleh diselesaikan pertama maupun terakhir.", "Vendor D harus diselesaikan tepat setelah Vendor A."]),
+            tail: "Manakah urutan pengerjaan yang benar, dari pertama sampai terakhir?",
+            opts: [o("A - D - C - B", 0), o("B - A - D - C", 0), o("A - D - B - C", 1), o("D - A - C - B", 0)] },
+          { tipe: "detail", bagian: 2, bag: "Ketelitian data",
+            q: "Bandingkan Master Data (kiri) dengan Input Sistem (kanan). Periksa setiap huruf, angka, dan tanda baca.",
+            extra: cmpTable([
+              ["INV-2026/MMT/09-082_Rp14.850.000", "INV-2026/MMT/09-082_Rp14.850.000"],
+              ["JRN/ACC/10294-X_Rp2.944.500", "JRN/ACC/10294-X_Rp2.944.500"],
+              ["PO-9928-TECH_IDR880.550.000", "PO-9928-TECh_IDR880.550.000"],
+              ["TAX.2026.PPN.11.0029_Rp3.450.000", "TAX.2026.PPN.11.0029_Rp3.540.000"],
+              ["DEB-CR-0029/OCT/V_Rp12.112.000", "DEB-CR-O029/OCT/V_Rp12.112.000"]
+            ]),
+            tail: "Berapa banyak kesalahan input yang terjadi?",
+            opts: [o("2 kesalahan", 0), o("3 kesalahan", 1), o("4 kesalahan", 0), o("5 kesalahan", 0)] },
+          { tipe: "detail", bagian: 2, bag: "Ketelitian data",
+            q: "Seorang staf akuntansi memindahkan data saldo dari buku besar. Pasangan angka mana yang mengalami transposisi, yaitu dua angka berdekatan yang posisinya tertukar?",
+            opts: [o("Master 894.225.100 menjadi Input 894.226.100", 0), o("Master 7.345.981.000 menjadi Input 7.435.981.000", 1), o("Master 12.856.400.900 menjadi Input 12.856.400.900", 0), o("Master 556.321.050 menjadi Input 556.321.050", 0)] }
+        ]
+      },
+
+      HRD: {
+        judul: "Logika Prosedur & Penilaian Situasi",
+        intro: "Ada 10 soal: 5 soal logika dan prosedur K3, lalu 5 soal situasi kerja. Pada soal situasi, pilih tindakan yang benar-benar akan Anda ambil, bukan yang sekadar terdengar paling aman.",
+        questions: [
+          { tipe: "iq", bagian: 1, bag: "Logika analitis",
+            q: "HR Operasional menjadwalkan audit kepatuhan SOP K3 di 5 area proyek: P, Q, R, S, dan T. Setiap area diaudit satu kali, satu area per hari, dari Senin sampai Jumat.",
+            extra: ul(["Area R harus diaudit tepat sehari sebelum area P.", "Area Q tidak boleh diaudit pada hari Senin maupun Jumat.", "Area T harus diaudit pada hari Rabu."]),
+            tail: "Jika area S diaudit pada hari Jumat, hari apakah area Q diaudit?",
+            opts: [o("Senin", 0), o("Selasa", 0), o("Kamis", 1), o("Jumat", 0)] },
+          { tipe: "iq", bagian: 1, bag: "Aritmatika & deteksi anomali",
+            q: "Sebuah proyek teknis menganggarkan biaya transportasi teknisi Rp 150.000 per kunjungan. Sistem monitoring mencatat 40 kunjungan bulan ini. Admin lapangan mengajukan klaim Rp 6.600.000 dengan alasan ada kenaikan tarif jam sibuk sebesar 20% pada setengah dari total kunjungan.",
+            tail: "Berapa selisih dana yang tidak akurat (potensi fraud) pada klaim tersebut?",
+            opts: [o("Rp 0 (klaim sudah akurat)", 1), o("Rp 300.000", 0), o("Rp 600.000", 0), o("Rp 900.000", 0)] },
+          { tipe: "iq", bagian: 1, bag: "Penalaran verbal",
+            q: "Perhatikan tiga pernyataan berikut.",
+            extra: ul(["Semua teknisi yang bekerja di area ketinggian wajib memiliki sertifikat SIO (Surat Izin Operasional) aktif.", "Sebagian teknisi di CV. Mitra Multi Teknik belum memperpanjang sertifikat SIO mereka.", "Tim Alpha adalah teknisi yang ditugaskan khusus untuk proyek instalasi tower luar ruangan (ketinggian)."]),
+            tail: "Kesimpulan operasional mana yang paling tepat?",
+            opts: [o("Semua anggota Tim Alpha otomatis terbebas dari aturan kepemilikan SIO aktif.", 0), o("Jika ada anggota Tim Alpha yang SIO-nya sudah mati, ia tidak boleh diturunkan ke proyek tersebut.", 1), o("Seluruh teknisi CV. Mitra Multi Teknik pasti memiliki SIO yang aktif.", 0), o("Tim Alpha boleh bekerja tanpa SIO asal didampingi HR Operasional secara langsung.", 0)] },
+          { tipe: "iq", bagian: 1, bag: "Pola deret",
+            q: "Perhatikan data pelanggaran SOP bulanan berikut untuk memprediksi tren.",
+            extra: seq("4 | 9 | 20 | 43 | 90 | ..."),
+            tail: "Berapa angka pelanggaran pada bulan ke-6?",
+            opts: [o("137", 0), o("175", 0), o("185", 1), o("187", 0)] },
+          { tipe: "iq", bagian: 1, bag: "Logika prosedur K3",
+            q: "Menurut SOP CV. Mitra Multi Teknik, sebelum mencuci AC teknisi wajib melakukan 4 langkah keselamatan secara berurutan.",
+            extra: ol(["Memakai seragam PDH kantor dan sepatu safety.", "Mematikan saklar utama listrik (MCB).", "Memastikan tidak ada aliran listrik pada unit AC menggunakan tespen.", "Memasang plastik pelindung air pada unit AC."]),
+            tail: "Seorang teknisi langsung ke langkah 4 setelah langkah 2, tanpa melakukan langkah 3. Risiko terbesar apa yang diabaikan?",
+            opts: [o("Plastik pelindung air rusak karena terkena suhu AC yang panas.", 0), o("Seragam PDH kotor karena cipratan air saat mencuci AC.", 0), o("Kebocoran arus listrik akibat saklar rusak atau korsleting tersembunyi, yang dapat menyengat teknisi saat menyentuh air.", 1), o("Waktu pengerjaan menjadi lebih lama sehingga merugikan efisiensi jam kerja.", 0)] },
+
+          { tipe: "sjt", bagian: 2, bag: "Penilaian situasi",
+            q: "Anda menemukan bahwa Manajer Operasional, atasan langsung yang sangat berjasa bagi karier Anda, memanipulasi data kecelakaan kerja ringan di laporan bulanan agar perusahaan mendapat penghargaan Zero Accident dari pemerintah. Atasan meminta Anda ikut menandatangani laporan tersebut.",
+            tail: "Bagaimana sikap Anda?",
+            opts: [o("Menandatanganinya demi menjaga hubungan baik dan loyalitas kepada atasan.", 1), o("Menolak menandatangani, menjelaskan dengan tegas pentingnya akurasi data keselamatan, dan melaporkan data yang benar sesuai prosedur.", 4), o("Menandatanganinya, tetapi membuat catatan pribadi yang hanya diketahui oleh Anda sendiri.", 2), o("Berpura-pura sakit atau mengambil cuti mendadak agar terhindar dari kewajiban menandatangani.", 3)] },
+          { tipe: "sjt", bagian: 2, bag: "Penilaian situasi",
+            q: "Saat sidak lapangan, Anda melihat teknisi senior mencuci AC klien tanpa mengecek aliran listrik dengan tespen. Alasannya, MCB sudah mati dan ia hafal rute kabel. Teknisi junior di sebelahnya ikut meniru kebiasaan berbahaya itu.",
+            tail: "Tindakan apa yang Anda ambil sebagai pemimpin?",
+            opts: [o("Membiarkannya karena teknisi tersebut sangat berpengalaman dan pekerjaannya jadi lebih singkat.", 1), o("Langsung memarahi teknisi senior di depan klien agar kapok.", 3), o("Menghentikan pekerjaan sementara dengan sopan, menegur teknisi senior secara tegas di area terpisah, mewajibkan tespen saat itu juga, dan mengingatkan bahwa ia contoh bagi teknisi junior.", 4), o("Mencatat namanya untuk dilaporkan ke direksi nanti tanpa tindakan pencegahan langsung di tempat.", 2)] },
+          { tipe: "sjt", bagian: 2, bag: "Penilaian situasi",
+            q: "Perusahaan melakukan audit kepatuhan SOP besar-besaran. Anda harus memeriksa ribuan berkas logbook teknisi secara manual selama 2 minggu, sementara tugas harian HR tetap menumpuk. Pekerjaan ini membosankan dan melelahkan.",
+            tail: "Bagaimana Anda menjaga ritme kerja?",
+            opts: [o("Mengerjakannya cepat tanpa ketelitian tinggi, yang penting cepat selesai.", 3), o("Membuat target harian yang terukur, mendelegasikan sebagian tugas administratif rutin jika memungkinkan, dan menjaga fokus karena hasil audit berdampak pada keselamatan di lapangan.", 4), o("Mengeluh kepada manajemen bahwa tugas ini tidak manusiawi dan meminta waktu audit diperpanjang secara sepihak.", 2), o("Menunda audit sampai beberapa hari terakhir sebelum tenggat, lalu mengerjakannya sekaligus dengan sistem kebut semalam.", 1)] },
+          { tipe: "sjt", bagian: 2, bag: "Penilaian situasi",
+            q: "Manajemen menolak usulan anggaran Anda untuk membeli sistem monitoring K3 berbasis aplikasi digital dengan alasan efisiensi biaya. Padahal sistem manual saat ini sangat rawan dimanipulasi oleh teknisi di lapangan.",
+            tail: "Bagaimana tanggapan Anda?",
+            opts: [o("Menerima keputusan dengan pasrah dan tetap memakai sistem manual tanpa perubahan apa pun.", 2), o("Memprotes secara terbuka dalam rapat karena merasa aspirasi keselamatan kerja tidak dihargai.", 3), o("Tetap bersemangat mencari solusi bebas biaya, misalnya formulir digital gratis, dan menyusun ulang proposal dengan perbandingan kerugian finansial akibat fraud versus biaya aplikasi.", 4), o("Diam-diam membeli aplikasi dengan anggaran divisi lain tanpa persetujuan manajemen.", 1)] },
+          { tipe: "sjt", bagian: 2, bag: "Penilaian situasi",
+            q: "Seorang teknisi baru yang kompeten melapor secara rahasia bahwa tim senior di proyeknya biasa menjual sisa kabel tembaga milik perusahaan ke pengepul untuk kas informal tim. Ia diancam dikucilkan jika melapor.",
+            tail: "Tindakan kepemimpinan dan perlindungan apa yang Anda ambil?",
+            opts: [o("Meminta teknisi baru itu diam demi menjaga keharmonisan tim.", 2), o("Menjamin kerahasiaan identitas pelapor, mengaudit material secara independen di lapangan, mengamankan dana informal tersebut, dan memberi sanksi disiplin kepada oknum senior.", 4), o("Langsung mengonfrontasi tim senior di depan teknisi baru agar masalah selesai secara transparan.", 1), o("Memindahkan teknisi baru ke proyek lain tanpa menyelesaikan masalah pencurian material.", 3)] }
+        ]
+      }
+    };
+
+    /* Menghitung skor Tes 3.
+       - kognitif : jumlah jawaban benar pada soal tipe iq / detail
+       - sjt      : total bobot poin pada soal situasional (maks. 4 poin per soal), hanya untuk HRD */
+    function calculateCognitive(questions, answers) {
+      let benar = 0, nKog = 0, poin = 0, nSjt = 0;
+      questions.forEach((q, i) => {
+        const opt = q.opts[answers[i]];
+        const p = opt ? opt.p : 0;
+        if (q.tipe === "sjt") { nSjt++; poin += p; } else { nKog++; benar += p; }
+      });
+      const kognitif = { benar, total: nKog, persen: nKog ? Math.round((benar / nKog) * 100) : 0 };
+      const sjt = nSjt ? { poin, maks: nSjt * 4, persen: Math.round((poin / (nSjt * 4)) * 100) } : null;
+      return { kognitif, sjt };
+    }
+
+    /* =====================================================================
+       3c. IST (SE, RA, AN), PAPI KOSTICK, DiSC KATA SIFAT
+       Semua soal diambil ACAK dari bank untuk setiap peserta. Soal berhitung (RA)
+       dibangkitkan otomatis dengan angka acak, sehingga tiap peserta mendapat
+       angka berbeda.
+       ===================================================================== */
+    const IST_SE_N = 5, IST_RA_N = 5, IST_AN_N = 5;   // jumlah soal per subtes untuk tiap peserta
+    const PAPI_PER_TEST = 6;                          // jumlah nomor PAPI per peserta
+
+    const PAPI_ASPECTS = {
+      hasil: "Orientasi Hasil", tim: "Kerjasama Tim", pimpin: "Kepemimpinan",
+      prosedur: "Kepatuhan Prosedur", stres: "Toleransi Stres", teliti: "Ketelitian & Detail"
+    };
+
+    /* Format SE & AN: o[0] = jawaban benar. Urutan pilihan diacak otomatis saat tes dimulai. */
+    const IST_SE = [
+      { q: "Sebuah mobil pasti memiliki ...", o: ["roda", "bagasi", "radio", "klakson", "pendingin udara"], e: "Roda adalah bagian esensial yang pasti ada pada setiap mobil; pilihan lain hanya pelengkap." },
+      { q: "Sebuah rapat selalu melibatkan ...", o: ["peserta", "makanan ringan", "proyektor", "notulen", "spanduk"], e: "Tanpa peserta tidak ada rapat; unsur lainnya tidak wajib." },
+      { q: "Sebuah neraca keuangan selalu memuat ...", o: ["aset dan kewajiban", "grafik penjualan", "foto direksi", "slogan perusahaan", "daftar karyawan"], e: "Neraca menggambarkan posisi keuangan: aset, kewajiban, dan modal." },
+      { q: "Sebuah kontrak kerja yang sah selalu mencantumkan ...", o: ["hak dan kewajiban kedua pihak", "warna kop surat", "foto karyawan", "menu makan siang", "jumlah kendaraan dinas"], e: "Inti kontrak adalah kesepakatan hak dan kewajiban para pihak." },
+      { q: "Prosedur kerja (SOP) disusun terutama untuk ...", o: ["menjaga keseragaman dan mutu pelaksanaan kerja", "menambah jumlah rapat", "menghindari tanggung jawab", "mengurangi gaji karyawan", "memperbanyak arsip"], e: "SOP menjadi standar langkah kerja agar hasilnya konsisten dan aman." },
+      { q: "Keselamatan kerja di lapangan terutama bergantung pada ...", o: ["kepatuhan terhadap prosedur", "kecepatan menyelesaikan pekerjaan", "banyaknya peralatan baru", "kerapian seragam", "jumlah rekan kerja"], e: "Prosedur keselamatan hanya efektif jika benar-benar dipatuhi." },
+      { q: "Orang yang teliti biasanya ...", o: ["memeriksa ulang pekerjaannya sebelum diserahkan", "menyelesaikan pekerjaan secepat mungkin", "menghindari pekerjaan yang rinci", "mengandalkan tebakan", "menyerahkan pekerjaan kepada orang lain"], e: "Pemeriksaan ulang adalah ciri utama ketelitian." },
+      { q: "Absensi karyawan dicatat terutama untuk ...", o: ["dasar penilaian kehadiran dan perhitungan upah", "menghias kantor", "membatasi cuti", "menentukan warna seragam", "mengurangi pekerjaan"], e: "Data kehadiran dipakai untuk menilai disiplin dan menghitung upah." },
+      { q: "Audit dilakukan untuk ...", o: ["memeriksa kesesuaian antara pencatatan dan kenyataan", "mempercepat penjualan", "merekrut karyawan baru", "mengganti pimpinan", "menaikkan harga"], e: "Audit bertujuan memverifikasi bahwa catatan sesuai dengan kondisi sebenarnya." },
+      { q: "Tim yang solid ditandai dengan ...", o: ["saling percaya dan pembagian tugas yang jelas", "semua anggota selalu setuju", "satu orang mengerjakan semua tugas", "tidak pernah ada diskusi", "persaingan antaranggota"], e: "Kepercayaan dan kejelasan peran adalah fondasi tim yang solid." },
+      { q: "Sebelum mengambil keputusan penting, sebaiknya seseorang ...", o: ["mengumpulkan informasi yang relevan", "menunggu orang lain memutuskan", "memilih cara tercepat saja", "mengikuti perasaan sesaat", "menunda tanpa batas waktu"], e: "Keputusan yang baik didasarkan pada informasi yang memadai." },
+      { q: "Anggaran disusun supaya ...", o: ["pengeluaran dapat direncanakan dan dikendalikan", "pengeluaran bebas tanpa batas", "pemasukan bertambah otomatis", "pegawai bekerja lebih lama", "semua biaya dihapus"], e: "Fungsi anggaran adalah perencanaan dan pengendalian keuangan." },
+      { q: "Slip gaji berfungsi sebagai ...", o: ["bukti rincian penerimaan dan potongan upah", "tanda penghargaan", "surat peringatan", "daftar belanja", "undangan rapat"], e: "Slip gaji merinci komponen upah dan potongan yang diterima karyawan." },
+      { q: "Karyawan yang disiplin selalu ...", o: ["menepati jam dan aturan kerja", "datang sesuka hati", "menunda tugas", "menghindari atasan", "mengabaikan prosedur"], e: "Disiplin berarti konsisten menaati waktu dan aturan." },
+      { q: "Laporan keuangan yang baik harus ...", o: ["akurat dan dapat dipertanggungjawabkan", "dibuat sesingkat mungkin", "berwarna menarik", "berisi opini pribadi", "disembunyikan dari auditor"], e: "Akurasi dan akuntabilitas adalah syarat utama laporan keuangan." },
+      { q: "Komunikasi yang efektif ditandai dengan ...", o: ["pesan yang diterima sama dengan yang dimaksud", "bicara paling banyak", "suara paling keras", "menghindari pertanyaan", "memakai istilah rumit"], e: "Komunikasi efektif terjadi bila makna pesan dipahami sama oleh penerima." }
+    ];
+
+    const IST_AN = [
+      { q: "Dokter : Pasien = Guru : ...", o: ["Murid", "Sekolah", "Buku", "Papan tulis", "Kelas"], e: "Hubungan pemberi layanan dan penerima layanan." },
+      { q: "Pisau : Memotong = Pena : ...", o: ["Menulis", "Tinta", "Kertas", "Buku", "Guru"], e: "Hubungan alat dan fungsinya." },
+      { q: "Panas : Dingin = Terang : ...", o: ["Gelap", "Lampu", "Cahaya", "Silau", "Siang"], e: "Hubungan lawan kata (antonim)." },
+      { q: "Hari : Minggu = Bulan : ...", o: ["Tahun", "Tanggal", "Jam", "Kalender", "Musim"], e: "Satuan waktu yang lebih kecil membentuk satuan yang lebih besar: 7 hari = 1 minggu, 12 bulan = 1 tahun." },
+      { q: "Mata : Melihat = Telinga : ...", o: ["Mendengar", "Suara", "Musik", "Kepala", "Anting"], e: "Hubungan organ dan fungsinya." },
+      { q: "Pesawat : Bandara = Kapal : ...", o: ["Pelabuhan", "Laut", "Nakhoda", "Layar", "Pantai"], e: "Hubungan alat angkut dan tempat bersandarnya." },
+      { q: "Teliti : Cermat = Pandai : ...", o: ["Cerdas", "Bodoh", "Rajin", "Sekolah", "Guru"], e: "Hubungan persamaan kata (sinonim)." },
+      { q: "Kenyang : Lapar = Lunas : ...", o: ["Berutang", "Kaya", "Hemat", "Bayar", "Tunai"], e: "Hubungan lawan kata (antonim): lunas berlawanan dengan masih berutang." },
+      { q: "Suhu : Termometer = Berat : ...", o: ["Timbangan", "Penggaris", "Kompas", "Jam", "Barometer"], e: "Hubungan besaran dan alat ukurnya." },
+      { q: "Kepala : Topi = Kaki : ...", o: ["Sepatu", "Celana", "Kaus", "Sarung tangan", "Kacamata"], e: "Hubungan bagian tubuh dan pelindung yang dikenakan padanya." },
+      { q: "Hakim : Pengadilan = Dokter : ...", o: ["Rumah sakit", "Obat", "Pasien", "Sekolah", "Apotek"], e: "Hubungan profesi dan tempat kerjanya." },
+      { q: "Rajin : Berhasil = Malas : ...", o: ["Gagal", "Santai", "Tidur", "Kerja", "Libur"], e: "Hubungan sebab dan akibat." },
+      { q: "Kunci : Pintu = Password : ...", o: ["Akun", "Layar", "Keyboard", "Kertas", "Kabel"], e: "Hubungan alat pengaman dan benda yang diamankan." },
+      { q: "Lampu : Terang = Kipas : ...", o: ["Sejuk", "Listrik", "Putar", "Baling-baling", "Kamar"], e: "Hubungan alat dan efek yang dihasilkannya." },
+      { q: "Naik : Turun = Masuk : ...", o: ["Keluar", "Pintu", "Jalan", "Rumah", "Tamu"], e: "Hubungan lawan kata (antonim)." },
+      { q: "Bendahara : Keuangan = Sekretaris : ...", o: ["Administrasi", "Gaji", "Rapat", "Komputer", "Direktur"], e: "Hubungan jabatan dan bidang tanggung jawabnya." }
+    ];
+
+    /* ---------- Generator soal berhitung (RA): angka acak setiap kali ---------- */
+    const rint = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    const rp = n => "Rp " + Math.round(n).toLocaleString("id-ID");
+    const num = n => (Math.round(n * 100) / 100).toLocaleString("id-ID");
+    const wkt = (h, m) => String(h).padStart(2, "0") + "." + String(m).padStart(2, "0");
+
+    function makeRA(q, correct, wrongs, fmt, e) {
+      correct = Math.round(correct * 100) / 100;
+      const set = [correct];
+      wrongs.forEach(v => { v = Math.round(v * 100) / 100; if (v > 0 && !set.includes(v)) set.push(v); });
+      const step = correct >= 10000 ? Math.max(1000, Math.round((correct * 0.05) / 1000) * 1000) : 1;
+      for (let k = 1; set.length < 5; k++) {
+        [correct + k * step, correct - k * step].forEach(c => {
+          c = Math.round(c * 100) / 100;
+          if (set.length < 5 && c > 0 && !set.includes(c)) set.push(c);
+        });
+      }
+      const opts = shuffle(set.slice(0, 5)).map(v => ({ t: fmt(v), p: v === correct ? 1 : 0 }));
+      return { tipe: "ra", bag: "IST RA: Berhitung", hint: "Hitung dengan teliti. Anda boleh memakai kertas coretan.", q, opts, e };
+    }
+
+    const RA_TEMPLATES = [
+      // 1. Upah lembur
+      () => {
+        const r = pick([15000, 20000, 25000, 30000, 40000, 50000]), y = rint(2, 5);
+        const benar = 1.5 * r + (y - 1) * 2 * r;
+        return makeRA(
+          `Upah per jam seorang karyawan adalah ${rp(r)}. Pada hari kerja ia lembur ${y} jam. Jam lembur pertama dibayar 1,5 kali dan jam berikutnya 2 kali upah per jam. Berapa total upah lembur?`,
+          benar, [y * 1.5 * r, y * 2 * r, y * r, 2 * r + (y - 1) * 1.5 * r], rp,
+          `Jam pertama: 1,5 × ${rp(r)} = ${rp(1.5 * r)}.\nJam berikutnya: ${y - 1} × 2 × ${rp(r)} = ${rp((y - 1) * 2 * r)}.\nTotal = ${rp(benar)}.`);
+      },
+      // 2. Gaji bersih setelah iuran
+      () => {
+        const g = pick([4000000, 4500000, 5000000, 5500000, 6000000, 7000000, 8000000, 9000000]);
+        const benar = g * 0.97;
+        return makeRA(
+          `Gaji pokok seorang karyawan ${rp(g)}. Dipotong iuran BPJS Kesehatan 1% dan BPJS Ketenagakerjaan (JHT) 2% dari gaji pokok. Berapa gaji bersih yang diterima?`,
+          benar, [g * 0.98, g * 0.99, g * 0.96, g * 1.03], rp,
+          `Total potongan = 1% + 2% = 3%.\nPotongan = 3% × ${rp(g)} = ${rp(g * 0.03)}.\nGaji bersih = ${rp(g)} − ${rp(g * 0.03)} = ${rp(benar)}.`);
+      },
+      // 3. Dua teknisi bekerja bersamaan
+      () => {
+        const [a, b] = pick([[6, 3], [12, 4], [10, 15], [20, 5], [15, 10], [12, 6], [30, 15], [20, 30], [8, 8], [6, 12]]);
+        const benar = (a * b) / (a + b);
+        return makeRA(
+          `Teknisi A dapat menyelesaikan satu paket instalasi sendirian dalam ${a} jam, sedangkan teknisi B dalam ${b} jam. Jika keduanya bekerja bersamaan, berapa jam waktu yang dibutuhkan?`,
+          benar, [(a + b) / 2, a + b, Math.min(a, b), benar + 1], n => num(n) + " jam",
+          `Kecepatan A = 1/${a}, kecepatan B = 1/${b} pekerjaan per jam.\nBersama = 1/${a} + 1/${b} = ${a + b}/${a * b}.\nWaktu = ${a * b}/${a + b} = ${num(benar)} jam.`);
+      },
+      // 4. Pembagian anggaran dengan rasio
+      () => {
+        const [x, y, z] = pick([[2, 3, 5], [1, 2, 3], [3, 4, 5], [2, 5, 3], [1, 3, 6]]);
+        const unit = pick([2000000, 3000000, 5000000, 10000000]), total = (x + y + z) * unit;
+        return makeRA(
+          `Anggaran proyek ${rp(total)} dibagi untuk pos Material, Tenaga Kerja, dan Operasional dengan perbandingan ${x} : ${y} : ${z}. Berapa alokasi untuk pos Tenaga Kerja?`,
+          y * unit, [x * unit, z * unit, total / 3, (y + 1) * unit], rp,
+          `Jumlah perbandingan = ${x} + ${y} + ${z} = ${x + y + z}.\nNilai 1 bagian = ${rp(total)} ÷ ${x + y + z} = ${rp(unit)}.\nTenaga Kerja = ${y} × ${rp(unit)} = ${rp(y * unit)}.`);
+      },
+      // 5. Jam kerja efektif seminggu
+      () => {
+        const sh = pick([7, 8]), sm = pick([0, 30]), eh = pick([16, 17]), em = pick([0, 15, 30, 45]), br = pick([1, 0.5]);
+        const kantor = ((eh * 60 + em) - (sh * 60 + sm)) / 60, harian = kantor - br, benar = harian * 5;
+        return makeRA(
+          `Seorang karyawan masuk pukul ${wkt(sh, sm)} dan pulang pukul ${wkt(eh, em)}, dengan istirahat ${br * 60} menit setiap hari. Jika bekerja 5 hari seminggu, berapa jam kerja efektifnya dalam seminggu?`,
+          benar, [benar + br * 5, harian * 6, harian, (harian + br) * 6], n => num(n) + " jam",
+          `Durasi di kantor = ${num(kantor)} jam.\nKerja efektif per hari = ${num(kantor)} − ${num(br)} = ${num(harian)} jam.\nSeminggu = 5 × ${num(harian)} = ${num(benar)} jam.`);
+      },
+      // 6. PPN lalu diskon
+      () => {
+        const h = pick([1000000, 2000000, 2500000, 5000000, 7500000, 10000000]), d = pick([10, 20, 25]);
+        const benar = h * 1.11 * (1 - d / 100);
+        return makeRA(
+          `Harga sebuah peralatan sebelum pajak adalah ${rp(h)}. Dikenakan PPN 11%, kemudian pembeli mendapat diskon ${d}% dari harga setelah PPN. Berapa harga yang harus dibayar?`,
+          benar, [h * 1.11, h * (1 - d / 100), h * (1.11 - d / 100), h * (1.11 + d / 100)], rp,
+          `Harga setelah PPN = ${rp(h)} × 1,11 = ${rp(h * 1.11)}.\nDiskon ${d}% = ${rp(h * 1.11 * d / 100)}.\nHarga bayar = ${rp(benar)}.`);
+      },
+      // 7. Denda keterlambatan
+      () => {
+        let n, p;
+        do { n = pick([40, 50, 60, 80, 100, 120]); p = pick([75, 80, 85, 90, 95]); } while ((n * (100 - p)) % 100 !== 0);
+        const telat = (n * (100 - p)) / 100, denda = pick([10000, 15000, 20000, 25000]), benar = telat * denda;
+        return makeRA(
+          `Dari ${n} karyawan, ${p}% hadir tepat waktu pada suatu pagi. Karyawan yang terlambat dikenai denda ${rp(denda)} per orang. Berapa total denda yang terkumpul?`,
+          benar, [(n - telat) * denda, n * denda, (telat * denda) / 2, telat * (denda + 5000)], rp,
+          `Terlambat = ${100 - p}% × ${n} = ${telat} orang.\nTotal denda = ${telat} × ${rp(denda)} = ${rp(benar)}.`);
+      },
+      // 8. Waktu tempuh
+      () => {
+        const v = pick([30, 40, 45, 60]);
+        let m, d;
+        do { m = pick([20, 30, 40, 45, 60, 90]); d = (v * m) / 60; } while (!Number.isInteger(d));
+        return makeRA(
+          `Jarak dari kantor ke lokasi proyek ${d} km. Teknisi berkendara dengan kecepatan rata-rata ${v} km/jam. Berapa menit waktu tempuhnya?`,
+          m, [m + 10, m - 10, m * 2, d, m + 15], n => num(n) + " menit",
+          `Waktu = jarak ÷ kecepatan = ${d} ÷ ${v} = ${num(d / v)} jam.\n${num(d / v)} jam × 60 = ${m} menit.`);
+      },
+      // 9. Kenaikan gaji
+      () => {
+        const g = pick([3000000, 4000000, 5000000, 6000000, 8000000]), p = pick([5, 8, 10, 12, 15]);
+        const benar = g * (1 + p / 100);
+        return makeRA(
+          `Gaji pokok seorang staf ${rp(g)} per bulan. Setelah evaluasi kinerja, gajinya naik ${p}%. Berapa gaji barunya?`,
+          benar, [g * p / 100, g * (1 - p / 100), g + p * 10000, g * (1 + p / 50)], rp,
+          `Kenaikan = ${p}% × ${rp(g)} = ${rp(g * p / 100)}.\nGaji baru = ${rp(g)} + ${rp(g * p / 100)} = ${rp(benar)}.`);
+      },
+      // 10. Persentase kehadiran
+      () => {
+        const x = pick([20, 24, 25, 26]), a = rint(1, 4), h = x - a, benar = (h / x) * 100;
+        return makeRA(
+          `Dalam satu bulan terdapat ${x} hari kerja. Seorang karyawan tidak masuk ${a} hari. Berapa persen tingkat kehadirannya?`,
+          benar, [(a / x) * 100, h, benar - 5, benar + 5], n => num(n) + "%",
+          `Hadir = ${x} − ${a} = ${h} hari.\nPersentase = ${h} ÷ ${x} × 100% = ${num(benar)}%.`);
+      }
+    ];
+
+    function buildIstQuestions() {
+      const mk = (tipe, bag, hint) => x => ({
+        tipe, bag, hint, q: x.q, e: x.e,
+        opts: shuffle(x.o.map((t, i) => ({ t, p: i === 0 ? 1 : 0 })))
+      });
+      const se = shuffle(IST_SE).slice(0, IST_SE_N).map(mk("se", "IST SE: Melengkapi Kalimat", "Pilih kata atau frasa yang paling tepat untuk melengkapi kalimat."));
+      const ra = shuffle(RA_TEMPLATES).slice(0, IST_RA_N).map(f => f());
+      const an = shuffle(IST_AN).slice(0, IST_AN_N).map(mk("an", "IST AN: Analogi Kata", "Temukan hubungan pada pasangan kata pertama, lalu terapkan pada pasangan kedua."));
+      return [...se, ...ra, ...an];
+    }
+
+    function calculateIst(questions, answers) {
+      const sub = { se: { benar: 0, total: 0 }, ra: { benar: 0, total: 0 }, an: { benar: 0, total: 0 } };
+      const detail = [];
+      questions.forEach((q, i) => {
+        const dipilih = q.opts[answers[i]];
+        const kunci = q.opts.find(x => x.p === 1);
+        const ok = dipilih && dipilih.p === 1 ? 1 : 0;
+        sub[q.tipe].total++; sub[q.tipe].benar += ok;
+        detail.push({ t: q.tipe, q: q.q, j: dipilih ? dipilih.t : "-", k: kunci ? kunci.t : "-", ok, e: q.e || "" });
+      });
+      const benar = sub.se.benar + sub.ra.benar + sub.an.benar, total = questions.length;
+      return { ringkas: { se: sub.se, ra: sub.ra, an: sub.an, benar, total, persen: total ? Math.round((benar / total) * 100) : 0 }, detail };
+    }
+
+    /* ---------- PAPI Kostick (pilihan paksa): [aspek A, pernyataan A, aspek B, pernyataan B] ---------- */
+    const PAPI_PAIRS = [
+      ["hasil", "Saya lebih mementingkan target tercapai tepat waktu.", "tim", "Saya lebih mementingkan suasana kerja sama yang kompak."],
+      ["hasil", "Saya akan mengejar hasil terbaik walau harus bekerja lebih keras.", "pimpin", "Saya lebih suka mengarahkan dan mengatur orang lain agar bekerja."],
+      ["hasil", "Saya memilih cara tercepat agar target tercapai.", "prosedur", "Saya memilih mengikuti prosedur walau memakan waktu lebih lama."],
+      ["hasil", "Saya terdorong menyelesaikan pekerjaan lebih cepat dari jadwal.", "stres", "Saya tetap tenang meskipun pekerjaan menumpuk."],
+      ["hasil", "Saya lebih senang menyelesaikan banyak pekerjaan dalam sehari.", "teliti", "Saya lebih senang memeriksa setiap detail sampai tidak ada kesalahan."],
+      ["tim", "Saya lebih nyaman bekerja bersama dan saling membantu rekan.", "pimpin", "Saya lebih nyaman mengambil peran sebagai pemimpin kelompok."],
+      ["tim", "Saya lebih dulu membantu rekan yang kesulitan, meski pekerjaan saya tertunda.", "prosedur", "Saya lebih dulu memastikan pekerjaan saya sesuai prosedur sebelum membantu."],
+      ["tim", "Saya mudah mencari dukungan rekan ketika menghadapi tekanan.", "stres", "Saya terbiasa menghadapi tekanan sendiri tanpa merepotkan orang lain."],
+      ["tim", "Saya lebih suka berdiskusi dengan rekan sebelum menyelesaikan tugas.", "teliti", "Saya lebih suka mengerjakan tugas sendiri agar hasilnya lebih rapi."],
+      ["pimpin", "Saya berani mengambil keputusan sendiri saat situasi mendesak.", "prosedur", "Saya menunggu arahan sesuai prosedur sebelum mengambil keputusan."],
+      ["pimpin", "Saya senang diberi tanggung jawab memimpin saat situasi sulit.", "stres", "Saya mampu menjaga ketenangan saat situasi sulit tanpa harus memimpin."],
+      ["pimpin", "Saya lebih suka menentukan arah kerja daripada memeriksa detail.", "teliti", "Saya lebih suka memeriksa detail daripada menentukan arah kerja."],
+      ["prosedur", "Saya tetap menaati prosedur walau sedang dikejar waktu.", "stres", "Saya tetap bekerja dengan tenang walau prosedur belum jelas."],
+      ["prosedur", "Saya mematuhi aturan dan standar yang telah ditetapkan.", "teliti", "Saya mencatat dan memeriksa angka dengan sangat cermat."],
+      ["stres", "Saya tidak mudah cemas ketika banyak tuntutan datang bersamaan.", "teliti", "Saya merasa tidak tenang bila ada kesalahan kecil yang belum diperiksa."]
+    ];
+
+    function buildPapiQuestions() {
+      return shuffle(PAPI_PAIRS).slice(0, PAPI_PER_TEST).map(([k1, t1, k2, t2]) => ({
+        tipe: "papi", bag: "PAPI Kostick: Pilihan Paksa",
+        hint: "Pilih satu pernyataan yang LEBIH menggambarkan diri Anda dalam bekerja. Tidak ada jawaban benar atau salah.",
+        q: "Mana yang lebih menggambarkan diri Anda?",
+        opts: shuffle([{ t: t1, k: k1 }, { t: t2, k: k2 }])
+      }));
+    }
+
+    /* Skor PAPI = persentase seberapa sering sebuah aspek DIPILIH dibanding berapa kali aspek itu MUNCUL.
+       Dengan begitu skor tetap sebanding walau tiap peserta menerima kombinasi soal berbeda. */
+    function calculatePapi(questions, answers) {
+      const muncul = {}, pilih = {};
+      questions.forEach((q, i) => {
+        q.opts.forEach(op => { muncul[op.k] = (muncul[op.k] || 0) + 1; });
+        const dipilih = q.opts[answers[i]];
+        if (dipilih) pilih[dipilih.k] = (pilih[dipilih.k] || 0) + 1;
+      });
+      const hasil = {};
+      Object.keys(muncul).forEach(k => { hasil[k] = Math.round(((pilih[k] || 0) / muncul[k]) * 100); });
+      const urut = Object.keys(hasil).sort((a, b) => (hasil[b] - hasil[a]) || ((pilih[b] || 0) - (pilih[a] || 0)));
+      return { ...hasil, dominan: urut[0], kedua: urut[1] };
+    }
+
+    /* ---------- DiSC versi kata sifat (dipakai bersama soal pernyataan) ---------- */
+    const adj = (d, i, s, c) => ({
+      q: "Pilih kata yang PALING dan PALING TIDAK menggambarkan diri Anda.",
+      opts: [{ k: "D", t: d }, { k: "I", t: i }, { k: "S", t: s }, { k: "C", t: c }]
+    });
+    const DISC_ADJ = [
+      adj("Tegas", "Antusias", "Sabar", "Teliti"),
+      adj("Berani", "Ramah", "Setia", "Cermat"),
+      adj("Kompetitif", "Persuasif", "Pengertian", "Disiplin"),
+      adj("Mandiri", "Ceria", "Tenang", "Logis"),
+      adj("Berambisi", "Menginspirasi", "Konsisten", "Terstruktur"),
+      adj("Lugas", "Komunikatif", "Pendengar baik", "Hati-hati"),
+      adj("Pengambil risiko", "Spontan", "Penyabar", "Analitis"),
+      adj("Berkemauan keras", "Mudah bergaul", "Dapat diandalkan", "Akurat"),
+      adj("Pemimpin", "Pemotivasi", "Penengah", "Pemeriksa"),
+      adj("Cepat memutuskan", "Hangat", "Stabil", "Patuh aturan"),
+      adj("Menantang", "Meyakinkan", "Loyal", "Kritis"),
+      adj("Percaya diri", "Bersemangat", "Kalem", "Rinci")
+    ];
+
+    const DISC_NAMES = {
+      D: { nama: "Dominance", ket: "Tegas, kompetitif, berorientasi hasil" },
+      I: { nama: "Influence", ket: "Komunikatif, persuasif, antusias" },
+      S: { nama: "Steadiness", ket: "Sabar, stabil, suportif" },
+      C: { nama: "Compliance", ket: "Teliti, analitis, patuh standar" }
+    };
+    const DISC_ORDER = ["D", "I", "S", "C"];
+
+    /* =====================================================================
+       4. LOGIKA PENILAIAN (MATCHING ALGORITHM BINTANG 1-5)
+       ===================================================================== */
+    const POSITION_RULES = {
+      HRD:        { disc: ["I", "S"], minAkurasi: 70 },
+      Accounting: { disc: ["C"],      minAkurasi: 90 }
+    };
+
+    /* Menghitung skor DISC dari jawaban Most/Least.
+       Skor = jumlah "Paling sesuai" - jumlah "Paling tidak sesuai".
+       Jika seri, dibandingkan jumlah "Paling sesuai"; jika masih seri, urutan D-I-S-C. */
+    function calculateDisc(answers) {
+      const skor = { D: 0, I: 0, S: 0, C: 0 };
+      const most = { D: 0, I: 0, S: 0, C: 0 };
+      answers.forEach(a => {
+        skor[a.most] += 1; most[a.most] += 1;
+        skor[a.least] -= 1;
+      });
+      const ranking = [...DISC_ORDER].sort((x, y) =>
+        (skor[y] - skor[x]) || (most[y] - most[x]) || (DISC_ORDER.indexOf(x) - DISC_ORDER.indexOf(y))
+      );
+      return { D: skor.D, I: skor.I, S: skor.S, C: skor.C, dominan: ranking[0], kedua: ranking[1] };
+    }
+
+    /* Menghitung bintang untuk satu posisi.
+       - Faktor DISC : 1.0 bila dominan sesuai, 0.6 bila gaya kedua sesuai, 0.3 bila tidak sesuai.
+       - Faktor Akurasi : akurasi / syarat minimal (maksimal 1.0), jadi turun proporsional.
+       - Bintang = 5 x (50% faktor DISC + 50% faktor akurasi), dibulatkan, minimal 1.
+       - 5 bintang hanya diberikan jika KEDUA syarat terpenuhi penuh. */
+    function calculateStars(posisi, disc, akurasi, totalJawab) {
+      const rule = POSITION_RULES[posisi];
+      if (!rule || !totalJawab) return 1;
+      const discFactor = rule.disc.includes(disc.dominan) ? 1 : (rule.disc.includes(disc.kedua) ? 0.6 : 0.3);
+      const accFactor = Math.min(akurasi / rule.minAkurasi, 1);
+      const fullyMet = discFactor === 1 && accFactor === 1;
+      let stars = Math.round(5 * (0.5 * discFactor + 0.5 * accFactor));
+      if (!fullyMet) stars = Math.min(stars, 4);
+      return Math.max(1, Math.min(5, stars));
+    }
+
+    /* =====================================================================
+       5. UTILITAS
+       ===================================================================== */
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+    function starsHtml(n, size = "text-xl") {
+      let h = "";
+      for (let i = 1; i <= 5; i++) h += `<span class="${size} ${i <= n ? "" : "star-off"}" aria-hidden="true">⭐</span>`;
+      return `<span class="inline-flex" role="img" aria-label="${n} dari 5 bintang">${h}</span>`;
+    }
+
+    /* =====================================================================
+       6. MODUL PESERTA
+       ===================================================================== */
+    const state = {
+      step: "register",       // register | discIntro | disc | krIntro | kr | saving | done | error
+      nama: "", posisi: "",
+      discQuestions: [], discOrder: [], discIdx: 0, discAnswers: [], tmpMost: null, tmpLeast: null,
+      kr: null, krResult: null, cogQuestions: [], cogIdx: 0, cogSel: null, cogAnswers: [],
+      result: null, saveError: "", qz: null, istResult: null, papiResult: null
+    };
+
+    const QZ_INTRO = {
+      ist: { s: 1, t: "Tes IST: Kecerdasan", b: "Mulai Tes IST", n: `Ada ${IST_SE_N + IST_RA_N + IST_AN_N} soal pilihan ganda dari 3 subtes: SE (melengkapi kalimat), RA (berhitung), dan AN (analogi kata). Soal dan angkanya berbeda untuk setiap peserta. Soal yang sudah dijawab tidak bisa diubah.` },
+      papi: { s: 2, t: "Tes PAPI Kostick: Gaya Kerja", b: "Mulai Tes PAPI", n: `Ada ${PAPI_PER_TEST} nomor. Setiap nomor memuat dua pernyataan, pilih satu yang LEBIH menggambarkan diri Anda dalam bekerja. Tidak ada jawaban benar atau salah, dan tidak ada pilihan netral.` }
+    };
+    const card = (inner, extra = "") => `<div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 ${extra}">${inner}</div>`;
+
+    function renderPeserta() {
+      const root = $("peserta-root");
+      switch (state.step) {
+        case "register": root.innerHTML = viewRegister(); break;
+        case "istIntro": case "papiIntro": root.innerHTML = viewQzIntro(); break;
+        case "qz": root.innerHTML = viewQz(); break;
+        case "discIntro": root.innerHTML = viewDiscIntro(); break;
+        case "disc": root.innerHTML = viewDisc(); break;
+        case "krIntro": root.innerHTML = viewKrIntro(); break;
+        case "kr": root.innerHTML = viewKr(); break;
+        case "cogIntro": root.innerHTML = viewCogIntro(); break;
+        case "cog": root.innerHTML = viewCog(); break;
+        case "saving": root.innerHTML = viewSaving(); break;
+        case "done": root.innerHTML = viewDone(); break;
+        case "error": root.innerHTML = viewError(); break;
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function stepper(active) {
+      const steps = ["Registrasi", "IST", "PAPI", "DiSC", "Pauli", "Logika"];
+      return `<div class="flex items-center gap-2 px-6 pt-5 text-xs sm:text-sm">
+        ${steps.map((s, i) => `
+          <div class="flex items-center gap-2 ${i <= active ? "text-brand-700 font-bold" : "text-slate-400"}">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs ${i < active ? "bg-brand-600 text-white" : i === active ? "bg-accent-500 text-white" : "bg-slate-200 text-slate-500"}">${i < active ? "✓" : i + 1}</span>
+            <span class="hidden sm:inline">${s}</span>
+          </div>${i < steps.length - 1 ? '<div class="flex-1 h-px bg-slate-300"></div>' : ""}`).join("")}
+      </div>`;
+    }
+
+    function viewRegister() {
+      return card(`
+        ${stepper(0)}
+        <div class="p-6 sm:p-8">
+          <h2 class="text-2xl font-extrabold text-navy-900">Selamat datang, calon karyawan</h2>
+          <p class="text-slate-600 mt-2">Isi data diri Anda, lalu kerjakan lima tes singkat (IST, PAPI, DiSC, Pauli, dan Logika). Total waktu sekitar 25 menit. Soal dan angka berbeda untuk setiap peserta. Kerjakan secara mandiri dan jujur.</p>
+          <div class="mt-6 space-y-5">
+            <div>
+              <label for="inp-nama" class="block text-sm font-semibold mb-1.5">Nama lengkap</label>
+              <input id="inp-nama" type="text" maxlength="80" autocomplete="name" value="${esc(state.nama)}"
+                class="w-full rounded-lg border border-slate-300 px-4 py-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none"
+                placeholder="Contoh: Andi Pratama" />
+            </div>
+            <div>
+              <span class="block text-sm font-semibold mb-1.5">Posisi yang dilamar</span>
+              <div class="grid grid-cols-2 gap-3">
+                ${["HRD", "Accounting"].map(p => `
+                  <label class="cursor-pointer">
+                    <input type="radio" name="posisi" value="${p}" class="peer sr-only" ${state.posisi === p ? "checked" : ""} />
+                    <div class="rounded-lg border-2 border-slate-200 px-4 py-3 text-center font-semibold transition peer-checked:border-accent-500 peer-checked:bg-accent-50 peer-checked:text-accent-600 peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500">${p}</div>
+                  </label>`).join("")}
+              </div>
+            </div>
+            <p id="reg-error" class="text-sm text-red-600 hidden"></p>
+            <button onclick="app.submitRegister()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-lg transition">Mulai tes</button>
+          </div>
+        </div>`);
+    }
+
+    function viewDiscIntro() {
+      return card(`
+        ${stepper(3)}
+        <div class="p-6 sm:p-8">
+          <h2 class="text-2xl font-extrabold text-navy-900">Tes DiSC: Kepribadian</h2>
+          <p class="text-slate-600 mt-2">Ada ${DISC_PER_TEST + DISC_ADJ_N} soal. Setiap soal memuat 4 pilihan pernyataan atau kata sifat.</p>
+          <ul class="mt-5 space-y-3 text-slate-700">
+            <li class="flex gap-3"><span class="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-brand-600 text-white text-xs flex items-center justify-center">✓</span><span>Pilih satu pernyataan yang <b>paling sesuai</b> dengan diri Anda.</span></li>
+            <li class="flex gap-3"><span class="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-accent-500 text-white text-xs flex items-center justify-center">✕</span><span>Pilih satu pernyataan yang <b>paling tidak sesuai</b> dengan diri Anda.</span></li>
+            <li class="flex gap-3"><span class="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-slate-300 text-xs flex items-center justify-center">i</span><span>Tidak ada jawaban benar atau salah. Jawablah sesuai kebiasaan Anda di dunia kerja.</span></li>
+          </ul>
+          <button onclick="app.startDisc()" class="mt-7 w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-lg transition">Mulai Tes DiSC</button>
+        </div>`);
+    }
+
+    function viewDisc() {
+      const i = state.discIdx, total = state.discQuestions.length;
+      const q = state.discQuestions[i], opts = state.discOrder[i];
+      const ready = state.tmpMost !== null && state.tmpLeast !== null;
+      return card(`
+        ${stepper(3)}
+        <div class="p-6 sm:p-8">
+          <div class="flex items-center justify-between text-sm text-slate-500 mb-2">
+            <span>Soal ${i + 1} dari ${total}</span><span>${Math.round((i / total) * 100)}%</span>
+          </div>
+          <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-accent-500 transition-all" style="width:${(i / total) * 100}%"></div></div>
+          <h2 class="text-lg sm:text-xl font-bold text-navy-900 mt-6">${esc(q.q)}</h2>
+          <div class="mt-5 space-y-3">
+            ${opts.map(o => {
+              const isMost = state.tmpMost === o.k, isLeast = state.tmpLeast === o.k;
+              return `<div class="rounded-xl border-2 p-3 sm:p-4 transition ${isMost ? "border-brand-500 bg-brand-50" : isLeast ? "border-accent-500 bg-accent-50" : "border-slate-200"}">
+                <p class="text-slate-800 mb-3">${esc(o.t)}</p>
+                <div class="grid grid-cols-2 gap-2">
+                  <button onclick="app.pick('most','${o.k}')" aria-pressed="${isMost}" class="py-2 rounded-lg text-sm font-semibold border transition ${isMost ? "bg-brand-600 text-white border-brand-600" : "bg-white text-brand-700 border-brand-100 hover:bg-brand-50"}">Paling sesuai</button>
+                  <button onclick="app.pick('least','${o.k}')" aria-pressed="${isLeast}" class="py-2 rounded-lg text-sm font-semibold border transition ${isLeast ? "bg-accent-500 text-white border-accent-500" : "bg-white text-accent-600 border-accent-100 hover:bg-accent-50"}">Paling tidak sesuai</button>
+                </div>
+              </div>`;
+            }).join("")}
+          </div>
+          <button onclick="app.nextDisc()" ${ready ? "" : "disabled"} class="mt-6 w-full font-bold py-3.5 rounded-lg transition ${ready ? "bg-brand-600 hover:bg-brand-700 text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"}">
+            ${i === total - 1 ? "Selesai Tes DiSC" : "Soal berikutnya"}
+          </button>
+        </div>`);
+    }
+
+    function viewKrIntro() {
+      return card(`
+        ${stepper(4)}
+        <div class="p-6 sm:p-8">
+          <h2 class="text-2xl font-extrabold text-navy-900">Tes Pauli/Kraepelin: Ketelitian Kerja</h2>
+          <p class="text-slate-600 mt-2">Dua angka akan tampil bersusun ke bawah. Jumlahkan keduanya, lalu tekan <b>digit terakhir</b> dari hasilnya.</p>
+          <div class="mt-5 rounded-xl bg-slate-50 border border-slate-200 p-5 flex flex-wrap items-center gap-6">
+            <div class="num-big text-3xl font-extrabold text-navy-900 leading-tight text-right">
+              <div>7</div><div class="border-b-2 border-navy-900 pb-1">+ 8</div><div class="text-accent-500 pt-1">5</div>
+            </div>
+            <p class="text-slate-700 flex-1 min-w-[200px]">7 + 8 = 15, maka tekan <b class="text-accent-600">5</b>. Soal langsung berganti setelah Anda menjawab.</p>
+          </div>
+          <ul class="mt-5 space-y-2 text-slate-700 text-sm list-disc pl-5">
+            <li>Waktu pengerjaan <b>${KRAEPELIN_DURATION} detik</b>, hitungan mundur dimulai saat tombol Mulai ditekan.</li>
+            <li>Gunakan keyboard angka atau tombol angka di layar.</li>
+            <li>Kecepatan dan ketepatan sama-sama dinilai. Jangan menebak asal-asalan.</li>
+          </ul>
+          <button onclick="app.startKr()" class="mt-7 w-full bg-accent-500 hover:bg-accent-600 text-white font-bold py-3.5 rounded-lg transition">Mulai Tes Pauli</button>
+        </div>`);
+    }
+
+    function viewKr() {
+      const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+      return `<div class="max-w-md mx-auto blueprint rounded-2xl shadow-lg overflow-hidden text-white">
+        <div class="px-5 pt-5">
+          <div class="flex justify-between items-end">
+            <div><p class="text-blue-200 text-xs">Sisa waktu</p><p id="kr-time" class="text-4xl font-extrabold num-big">${KRAEPELIN_DURATION}</p></div>
+            <div class="text-right"><p class="text-blue-200 text-xs">Terjawab</p><p id="kr-total" class="text-4xl font-extrabold num-big text-accent-400">0</p></div>
+          </div>
+          <div class="h-2 bg-navy-700 rounded-full mt-3 overflow-hidden"><div id="kr-bar" class="h-full bg-accent-500" style="width:100%"></div></div>
+        </div>
+        <div id="kr-card" class="mx-5 mt-5 rounded-xl bg-white text-navy-900 py-6 flex justify-center">
+          <div class="num-big text-7xl font-extrabold leading-none text-right">
+            <div id="kr-a">0</div>
+            <div class="border-b-4 border-navy-900 pb-2 mt-1"><span class="text-accent-500">+</span> <span id="kr-b">0</span></div>
+            <div class="text-slate-300 pt-2">?</div>
+          </div>
+        </div>
+        <p class="text-center text-blue-200 text-xs mt-3 px-5">Kolom <span id="kr-col">1</span> &middot; tekan digit terakhir dari hasil penjumlahan</p>
+        <div class="grid grid-cols-5 gap-2 p-5">
+          ${keys.map(k => `<button onclick="app.answerKr(${k})" class="key-btn aspect-square rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-2xl font-bold transition">${k}</button>`).join("")}
+        </div>
+      </div>`;
+    }
+
+    function viewCogIntro() {
+      const bank = COG_BANKS[state.posisi];
+      return card(`
+        ${stepper(5)}
+        <div class="p-6 sm:p-8">
+          <div class="rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-2.5 mb-5">Tes ketelitian selesai. Satu tes lagi.</div>
+          <h2 class="text-2xl font-extrabold text-navy-900">Tes Logika: ${esc(bank.judul)}</h2>
+          <p class="text-slate-600 mt-2">${esc(bank.intro)}</p>
+          <p class="text-slate-500 text-sm mt-3">Tidak ada batas waktu per soal, tetapi kerjakan dengan efisien. Soal yang sudah dijawab tidak bisa diubah.</p>
+          <button onclick="app.startCog()" class="mt-7 w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-lg transition">Mulai Tes Logika</button>
+        </div>`);
+    }
+
+    function viewCog() {
+      const i = state.cogIdx, total = state.cogQuestions.length;
+      const q = state.cogQuestions[i], sel = state.cogSel, ready = sel !== null;
+      return card(`
+        ${stepper(5)}
+        <div class="p-6 sm:p-8">
+          <div class="flex items-center justify-between text-sm text-slate-500 mb-2">
+            <span>Soal ${i + 1} dari ${total}</span><span>${Math.round((i / total) * 100)}%</span>
+          </div>
+          <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-accent-500 transition-all" style="width:${(i / total) * 100}%"></div></div>
+          <span class="inline-block mt-5 rounded-full bg-brand-100 text-brand-700 text-xs font-bold px-3 py-1">${esc(q.bag)}</span>
+          <h2 class="text-base sm:text-lg font-bold text-navy-900 mt-3 leading-relaxed">${esc(q.q)}</h2>
+          ${q.extra || ""}
+          ${q.tail ? `<p class="mt-4 font-semibold text-navy-900">${esc(q.tail)}</p>` : ""}
+          <div class="mt-5 space-y-3">
+            ${q.opts.map((op, oi) => `
+              <button onclick="app.pickCog(${oi})" aria-pressed="${sel === oi}" class="w-full text-left rounded-xl border-2 p-3 sm:p-4 transition flex gap-3 items-start ${sel === oi ? "border-brand-500 bg-brand-50" : "border-slate-200 hover:border-brand-100 hover:bg-slate-50"}">
+                <span class="shrink-0 w-7 h-7 rounded-full text-sm font-bold flex items-center justify-center ${sel === oi ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600"}">${String.fromCharCode(65 + oi)}</span>
+                <span class="pt-0.5">${esc(op.t)}</span>
+              </button>`).join("")}
+          </div>
+          <button onclick="app.nextCog()" ${ready ? "" : "disabled"} class="mt-6 w-full font-bold py-3.5 rounded-lg transition ${ready ? "bg-brand-600 hover:bg-brand-700 text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"}">
+            ${i === total - 1 ? "Selesai dan kirim jawaban" : "Soal berikutnya"}
+          </button>
+        </div>`);
+    }
+
+    function viewQzIntro() {
+      const k = state.step === "istIntro" ? "ist" : "papi", c = QZ_INTRO[k];
+      return card(`${stepper(c.s)}<div class="p-6 sm:p-8">
+        <h2 class="text-2xl font-extrabold text-navy-900">${c.t}</h2>
+        <p class="text-slate-600 mt-2">${c.n}</p>
+        <button onclick="app.startQz('${k}')" class="mt-7 w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-lg transition">${c.b}</button>
+      </div>`);
+    }
+
+    function viewQz() {
+      const z = state.qz, i = z.idx, total = z.qs.length, q = z.qs[i], sel = z.sel, ready = sel !== null;
+      return card(`${stepper(z.kind === "ist" ? 1 : 2)}
+        <div class="p-6 sm:p-8">
+          <div class="flex items-center justify-between text-sm text-slate-500 mb-2"><span>Soal ${i + 1} dari ${total}</span><span>${Math.round((i / total) * 100)}%</span></div>
+          <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-accent-500 transition-all" style="width:${(i / total) * 100}%"></div></div>
+          <span class="inline-block mt-5 rounded-full bg-brand-100 text-brand-700 text-xs font-bold px-3 py-1">${esc(q.bag)}</span>
+          <p class="text-sm text-slate-500 mt-2">${esc(q.hint)}</p>
+          <h2 class="text-base sm:text-lg font-bold text-navy-900 mt-3 leading-relaxed">${esc(q.q)}</h2>
+          <div class="mt-5 space-y-3">
+            ${q.opts.map((op, oi) => `
+              <button onclick="app.pickQz(${oi})" aria-pressed="${sel === oi}" class="w-full text-left rounded-xl border-2 p-3 sm:p-4 transition flex gap-3 items-start ${sel === oi ? "border-brand-500 bg-brand-50" : "border-slate-200 hover:border-brand-100 hover:bg-slate-50"}">
+                <span class="shrink-0 w-7 h-7 rounded-full text-sm font-bold flex items-center justify-center ${sel === oi ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600"}">${String.fromCharCode(65 + oi)}</span>
+                <span class="pt-0.5">${esc(op.t)}</span>
+              </button>`).join("")}
+          </div>
+          <button onclick="app.nextQz()" ${ready ? "" : "disabled"} class="mt-6 w-full font-bold py-3.5 rounded-lg transition ${ready ? "bg-brand-600 hover:bg-brand-700 text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"}">
+            ${i === total - 1 ? "Selesai tes ini" : "Soal berikutnya"}
+          </button>
+        </div>`);
+    }
+
+    function viewSaving() {
+      return card(`<div class="p-10 text-center">
+        <div class="mx-auto w-12 h-12 border-4 border-brand-100 border-t-accent-500 rounded-full animate-spin"></div>
+        <p class="mt-5 font-semibold text-navy-900">Menyimpan hasil tes...</p></div>`);
+    }
+
+    function viewDone() {
+      return card(`<div class="p-8 sm:p-10 text-center">
+        <div class="mx-auto w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-3xl">✓</div>
+        <h2 class="text-2xl font-extrabold text-navy-900 mt-5">Tes selesai, terima kasih ${esc(state.nama)}</h2>
+        <p class="text-slate-600 mt-2">Jawaban Anda sudah tersimpan dan akan ditinjau oleh tim HRD CV. Mitra Multi Teknik. Kami akan menghubungi Anda untuk tahap berikutnya.</p>
+        <button onclick="app.reset()" class="mt-7 bg-brand-600 hover:bg-brand-700 text-white font-bold px-6 py-3 rounded-lg transition">Peserta baru</button>
+      </div>`);
+    }
+
+    function viewError() {
+      return card(`<div class="p-8 text-center">
+        <div class="mx-auto w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-3xl">!</div>
+        <h2 class="text-xl font-extrabold text-navy-900 mt-5">Hasil belum tersimpan</h2>
+        <p class="text-slate-600 mt-2">${esc(state.saveError)}</p>
+        <p class="text-slate-500 text-sm mt-2">Periksa koneksi internet dan aturan (Rules) Firestore, lalu coba lagi. Jawaban Anda masih tersimpan di halaman ini.</p>
+        <button onclick="app.retrySave()" class="mt-6 bg-accent-500 hover:bg-accent-600 text-white font-bold px-6 py-3 rounded-lg transition">Coba simpan lagi</button>
+      </div>`);
+    }
+
+    /* ---------- Aksi peserta ---------- */
+    const krKeyHandler = e => {
+      if (e.repeat) return;
+      if (/^[0-9]$/.test(e.key)) { e.preventDefault(); app.answerKr(parseInt(e.key, 10)); }
+    };
+
+    const app = {
+      showTab(tab) {
+        $("view-peserta").classList.toggle("hidden", tab !== "peserta");
+        $("view-admin").classList.toggle("hidden", tab !== "admin");
+        const on = "bg-accent-500 text-white", off = "text-blue-100 hover:bg-navy-700";
+        $("tab-peserta").className = `px-4 py-2 rounded-md text-sm font-semibold transition ${tab === "peserta" ? on : off}`;
+        $("tab-admin").className = `px-4 py-2 rounded-md text-sm font-semibold transition ${tab === "admin" ? on : off}`;
+        $("tab-peserta").setAttribute("aria-selected", tab === "peserta");
+        $("tab-admin").setAttribute("aria-selected", tab === "admin");
+        if (tab === "admin") renderAdmin();
+      },
+
+      submitRegister() {
+        const nama = $("inp-nama").value.trim();
+        const posisi = (document.querySelector('input[name="posisi"]:checked') || {}).value;
+        const err = $("reg-error");
+        if (nama.length < 3) { err.textContent = "Nama lengkap minimal 3 karakter."; err.classList.remove("hidden"); return; }
+        if (!posisi) { err.textContent = "Pilih posisi yang dilamar."; err.classList.remove("hidden"); return; }
+        state.nama = nama; state.posisi = posisi;
+        state.step = "istIntro"; renderPeserta();
+      },
+
+      startQz(kind) {
+        const qs = kind === "ist" ? buildIstQuestions() : buildPapiQuestions();
+        state.qz = { kind, qs, idx: 0, sel: null, ans: [] };
+        state.step = "qz"; renderPeserta();
+      },
+
+      pickQz(oi) {
+        state.qz.sel = oi;
+        const y = window.scrollY;
+        $("peserta-root").innerHTML = viewQz();
+        window.scrollTo({ top: y });
+      },
+
+      nextQz() {
+        const z = state.qz;
+        if (z.sel === null) return;
+        z.ans.push(z.sel); z.sel = null;
+        if (z.idx < z.qs.length - 1) { z.idx++; renderPeserta(); return; }
+        if (z.kind === "ist") { state.istResult = calculateIst(z.qs, z.ans); state.step = "papiIntro"; }
+        else { state.papiResult = calculatePapi(z.qs, z.ans); state.step = "discIntro"; }
+        renderPeserta();
+      },
+
+      startDisc() {
+        // Ambil soal acak dari bank soal, lalu acak urutan soal dan urutan pilihannya
+        state.discQuestions = shuffle([...shuffle(DISC_QUESTIONS).slice(0, DISC_PER_TEST), ...shuffle(DISC_ADJ).slice(0, DISC_ADJ_N)]);
+        state.discOrder = state.discQuestions.map(q => shuffle(q.opts));
+        state.discIdx = 0; state.discAnswers = []; state.tmpMost = null; state.tmpLeast = null;
+        state.step = "disc"; renderPeserta();
+      },
+
+      pick(type, key) {
+        if (type === "most") { state.tmpMost = key; if (state.tmpLeast === key) state.tmpLeast = null; }
+        else { state.tmpLeast = key; if (state.tmpMost === key) state.tmpMost = null; }
+        const y = window.scrollY;
+        $("peserta-root").innerHTML = viewDisc();
+        window.scrollTo({ top: y });
+      },
+
+      nextDisc() {
+        if (state.tmpMost === null || state.tmpLeast === null) return;
+        state.discAnswers.push({ most: state.tmpMost, least: state.tmpLeast });
+        state.tmpMost = null; state.tmpLeast = null;
+        if (state.discIdx < state.discQuestions.length - 1) { state.discIdx++; state.step = "disc"; }
+        else { state.step = "krIntro"; }
+        renderPeserta();
+      },
+
+      startKr() {
+        state.step = "kr"; renderPeserta();
+        const kr = state.kr = { total: 0, correct: 0, a: 0, b: 0, endAt: Date.now() + KRAEPELIN_DURATION * 1000, timer: null, active: true };
+        app.nextPair();
+        document.addEventListener("keydown", krKeyHandler);
+        kr.timer = setInterval(() => {
+          const left = Math.max(0, kr.endAt - Date.now());
+          const t = $("kr-time"), bar = $("kr-bar");
+          if (t) t.textContent = Math.ceil(left / 1000);
+          if (bar) bar.style.width = (left / (KRAEPELIN_DURATION * 1000)) * 100 + "%";
+          if (left <= 0) app.finishKr();
+        }, 100);
+      },
+
+      nextPair() {
+        const kr = state.kr;
+        // Kolom Pauli: 10 digit acak (0-9), dijumlahkan berpasangan dua angka berdekatan; setelah habis, kolom baru dibuat
+        if (!kr.col || kr.i >= kr.col.length - 1) { kr.col = Array.from({ length: 10 }, () => rint(0, 9)); kr.i = 0; kr.n = (kr.n || 0) + 1; }
+        kr.a = kr.col[kr.i]; kr.b = kr.col[kr.i + 1]; kr.i++;
+        if ($("kr-a")) { $("kr-a").textContent = kr.a; $("kr-b").textContent = kr.b; $("kr-col").textContent = kr.n; }
+      },
+
+      answerKr(d) {
+        const kr = state.kr;
+        if (!kr || !kr.active) return;
+        const ok = (kr.a + kr.b) % 10 === d;
+        kr.total++; if (ok) kr.correct++;
+        $("kr-total").textContent = kr.total;
+        const c = $("kr-card");
+        c.classList.remove("flash-ok", "flash-bad"); void c.offsetWidth;
+        c.classList.add(ok ? "flash-ok" : "flash-bad");
+        app.nextPair();
+      },
+
+      finishKr() {
+        const kr = state.kr;
+        if (!kr || !kr.active) return;
+        kr.active = false;
+        clearInterval(kr.timer);
+        document.removeEventListener("keydown", krKeyHandler);
+
+        const akurasi = kr.total ? Math.round((kr.correct / kr.total) * 1000) / 10 : 0;
+        state.krResult = { total: kr.total, akurasi };
+        state.step = "cogIntro";
+        renderPeserta();
+      },
+
+      startCog() {
+        const bank = COG_BANKS[state.posisi];
+        // Soal diacak di dalam masing-masing bagian, lalu urutan pilihan jawaban juga diacak
+        const g1 = shuffle(bank.questions.filter(q => q.bagian === 1));
+        const g2 = shuffle(bank.questions.filter(q => q.bagian === 2));
+        state.cogQuestions = [...g1, ...g2].map(q => ({ ...q, opts: shuffle(q.opts) }));
+        state.cogIdx = 0; state.cogSel = null; state.cogAnswers = [];
+        state.step = "cog"; renderPeserta();
+      },
+
+      pickCog(oi) {
+        state.cogSel = oi;
+        const y = window.scrollY;
+        $("peserta-root").innerHTML = viewCog();
+        window.scrollTo({ top: y });
+      },
+
+      nextCog() {
+        if (state.cogSel === null) return;
+        state.cogAnswers.push(state.cogSel);
+        state.cogSel = null;
+        if (state.cogIdx < state.cogQuestions.length - 1) { state.cogIdx++; state.step = "cog"; renderPeserta(); }
+        else { app.finalize(); }
+      },
+
+      finalize() {
+        const disc = calculateDisc(state.discAnswers);
+        const { total, akurasi } = state.krResult;
+        const cog = calculateCognitive(state.cogQuestions, state.cogAnswers);
+        const result = {
+          nama: state.nama,
+          posisi_dilamar: state.posisi,
+          skor_disc: disc,
+          skor_ist: state.istResult.ringkas,
+          skor_papi: state.papiResult,
+          total_jawab_kraepelin: total,
+          akurasi_kraepelin: akurasi,
+          rating_hr: calculateStars("HRD", disc, akurasi, total),
+          rating_accounting: calculateStars("Accounting", disc, akurasi, total),
+          skor_kognitif: cog.kognitif,
+          timestamp: Date.now()
+        };
+        // Firebase menolak nilai undefined, jadi skor_sjt hanya ditambahkan bila ada (posisi HRD)
+        if (cog.sjt) result.skor_sjt = cog.sjt;
+        state.result = result;
+        app.save();
+      },
+
+      async save() {
+        state.step = "saving"; renderPeserta();
+        try {
+          await saveCandidate(state.result);
+          state.step = "done";
+        } catch (e) {
+          console.error(e);
+          state.saveError = "Terjadi kesalahan saat menyimpan: " + (e && e.message ? e.message : "tidak diketahui");
+          state.step = "error";
+        }
+        renderPeserta();
+      },
+
+      retrySave() { app.save(); },
+
+      reset() {
+        Object.assign(state, { step: "register", nama: "", posisi: "", discQuestions: [], discOrder: [], discIdx: 0, discAnswers: [], tmpMost: null, tmpLeast: null, kr: null, krResult: null, cogQuestions: [], cogIdx: 0, cogSel: null, cogAnswers: [], result: null, saveError: "", qz: null, istResult: null, papiResult: null });
+        renderPeserta();
+      },
+
+      /* ---------- Admin ---------- */
+      adminLogin() {
+        const v = $("adm-pass").value;
+        if (v === ADMIN_PASSWORD) { sessionStorage.setItem("mmt_admin", "1"); renderAdmin(); }
+        else { const e = $("adm-err"); e.textContent = "Password salah. Coba lagi."; e.classList.remove("hidden"); }
+      },
+      adminLogout() { sessionStorage.removeItem("mmt_admin"); renderAdmin(); },
+      setSearch(v) { adminState.search = v; renderAdminList(); },
+      setFilter(v) { adminState.filter = v; renderAdminList(); },
+      async removeCandidate(id) {
+        if (!confirm("Hapus data kandidat ini secara permanen?")) return;
+        try { await deleteCandidate(id); } catch (e) { alert("Gagal menghapus: " + e.message); }
+      }
+    };
+    window.app = app;
+
+    /* =====================================================================
+       7. MODUL ADMIN (REAL-TIME)
+       ===================================================================== */
+    const adminState = { rows: [], search: "", filter: "all", error: "", loaded: false, listening: false };
+
+    function startAdminListener() {
+      if (adminState.listening) return;
+      adminState.listening = true;
+      listenCandidates(
+        obj => {
+          adminState.rows = Object.entries(obj).map(([id, v]) => ({ id, ...v })).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          adminState.loaded = true; adminState.error = "";
+          if (sessionStorage.getItem("mmt_admin") === "1" && !$("view-admin").classList.contains("hidden")) renderAdminList();
+        },
+        err => {
+          adminState.error = "Gagal membaca data: " + err.message + ". Periksa Firestore Rules Anda.";
+          adminState.loaded = true;
+          renderAdminList();
+        }
+      );
+    }
+
+    function renderAdmin() {
+      const root = $("admin-root");
+      if (sessionStorage.getItem("mmt_admin") !== "1") {
+        root.innerHTML = card(`<div class="p-6 sm:p-8">
+          <h2 class="text-2xl font-extrabold text-navy-900">Masuk sebagai Admin</h2>
+          <p class="text-slate-600 mt-2">Halaman ini berisi hasil tes seluruh kandidat dan hanya untuk tim HRD.</p>
+          <label for="adm-pass" class="block text-sm font-semibold mt-5 mb-1.5">Password</label>
+          <input id="adm-pass" type="password" class="w-full rounded-lg border border-slate-300 px-4 py-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none" onkeydown="if(event.key==='Enter')app.adminLogin()" />
+          <p id="adm-err" class="text-sm text-red-600 mt-2 hidden"></p>
+          <button onclick="app.adminLogin()" class="mt-5 w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-lg transition">Masuk</button>
+        </div>`, "max-w-md");
+        return;
+      }
+      root.innerHTML = `
+        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-2xl font-extrabold text-navy-900">Hasil Psikotes Kandidat</h2>
+            <p class="text-slate-500 text-sm flex items-center gap-2 mt-1"><span class="w-2 h-2 rounded-full bg-green-500 inline-block"></span>${useFirebase ? "Terhubung real-time ke Firebase" : "Mode demo (data lokal di browser ini)"}</p>
+          </div>
+          <button onclick="app.adminLogout()" class="self-start text-sm font-semibold text-slate-600 hover:text-accent-600 border border-slate-300 rounded-lg px-4 py-2 bg-white">Keluar</button>
+        </div>
+        <div id="adm-stats" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6"></div>
+        <div class="flex flex-col sm:flex-row gap-3 mb-4">
+          <input type="search" placeholder="Cari nama kandidat" value="${esc(adminState.search)}" oninput="app.setSearch(this.value)"
+            class="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none" />
+          <select onchange="app.setFilter(this.value)" class="rounded-lg border border-slate-300 bg-white px-4 py-2.5">
+            ${[["all", "Semua posisi"], ["HRD", "Melamar HRD"], ["Accounting", "Melamar Accounting"]].map(([v, l]) => `<option value="${v}" ${adminState.filter === v ? "selected" : ""}>${l}</option>`).join("")}
+          </select>
+        </div>
+        <div id="adm-list"></div>`;
+      startAdminListener();
+      renderAdminList();
+    }
+
+    function ratingBox(label, stars, matched) {
+      return `<div class="rounded-lg border px-3 py-2 ${matched ? "bg-green-50 border-green-500 text-green-800" : "bg-slate-50 border-slate-200 text-slate-600"}">
+        <div class="text-xs font-semibold flex items-center justify-between gap-2">
+          <span>Kecocokan ${label}</span>${matched ? '<span class="text-[11px] bg-green-600 text-white rounded px-1.5 py-0.5">Posisi dilamar</span>' : ""}
+        </div>
+        <div class="flex items-center gap-2 mt-1">${starsHtml(stars, "text-lg")}<span class="text-sm font-bold">${stars}/5</span></div>
+      </div>`;
+    }
+
+    function discBadge(d) {
+      const k = d && d.dominan ? d.dominan : "-";
+      const info = DISC_NAMES[k];
+      const colors = { D: "bg-red-100 text-red-700", I: "bg-yellow-100 text-yellow-800", S: "bg-green-100 text-green-700", C: "bg-blue-100 text-blue-700" };
+      return `<div class="flex items-center gap-2">
+        <span class="w-9 h-9 rounded-lg flex items-center justify-center font-extrabold ${colors[k] || "bg-slate-100 text-slate-500"}">${k}</span>
+        <div class="leading-tight"><div class="font-semibold text-sm">${info ? info.nama : "-"}</div>
+        <div class="text-xs text-slate-500">${d ? `D${d.D} I${d.I} S${d.S} C${d.C}` : ""}</div></div></div>`;
+    }
+
+    function accBlock(r) {
+      const acc = Number(r.akurasi_kraepelin) || 0;
+      const benar = Math.round(((r.total_jawab_kraepelin || 0) * acc) / 100);
+      const color = acc >= 90 ? "text-green-600" : acc >= 70 ? "text-brand-600" : "text-accent-600";
+      return `<div class="leading-tight"><div class="text-lg font-extrabold ${color}">${acc}%</div>
+        <div class="text-xs text-slate-500">${benar} benar dari ${r.total_jawab_kraepelin || 0} soal</div></div>`;
+    }
+
+    function istPapiBlock(r) {
+      const i = r.skor_ist, p = r.skor_papi;
+      if (!i && !p) return `<span class="text-sm text-slate-400">Belum ada</span>`;
+      const pa = p ? [p.dominan, p.kedua].filter(Boolean).map(k => PAPI_ASPECTS[k] || k).join(", ") : "-";
+      return `<div class="leading-tight space-y-1.5 text-xs text-slate-600">
+        ${i ? `<div><span class="text-lg font-extrabold text-brand-600">${i.persen}%</span> IST (${i.benar}/${i.total})<br>SE ${i.se.benar}/${i.se.total} &middot; RA ${i.ra.benar}/${i.ra.total} &middot; AN ${i.an.benar}/${i.an.total}</div>` : ""}
+        ${p ? `<div><b>PAPI dominan:</b> ${esc(pa)}</div>` : ""}</div>`;
+    }
+
+    function cogBlock(r) {
+      const k = r.skor_kognitif, s = r.skor_sjt;
+      if (!k) return `<span class="text-sm text-slate-400">Belum ada</span>`;
+      const warna = p => p >= 80 ? "text-green-600" : p >= 60 ? "text-brand-600" : "text-accent-600";
+      const label = r.posisi_dilamar === "Accounting" ? "logika & ketelitian data" : "logika & prosedur K3";
+      return `<div class="leading-tight space-y-1.5">
+        <div><span class="text-lg font-extrabold ${warna(k.persen)}">${k.benar}/${k.total}</span> <span class="text-xs text-slate-500">${label}</span></div>
+        ${s ? `<div><span class="text-lg font-extrabold ${warna(s.persen)}">${s.persen}%</span> <span class="text-xs text-slate-500">situasional (${s.poin}/${s.maks} poin)</span></div>` : ""}
+      </div>`;
+    }
+
+    function renderAdminList() {
+      const list = $("adm-list"), stats = $("adm-stats");
+      if (!list) return;
+      if (adminState.error) { list.innerHTML = `<div class="rounded-xl bg-red-50 border border-red-200 text-red-700 p-5">${esc(adminState.error)}</div>`; return; }
+      if (!adminState.loaded) { list.innerHTML = `<div class="text-center text-slate-500 py-12">Memuat data...</div>`; return; }
+
+      const all = adminState.rows;
+      const q = adminState.search.trim().toLowerCase();
+      const rows = all.filter(r => (adminState.filter === "all" || r.posisi_dilamar === adminState.filter) && (!q || (r.nama || "").toLowerCase().includes(q)));
+
+      const avg = all.length ? Math.round((all.reduce((s, r) => s + (Number(r.akurasi_kraepelin) || 0), 0) / all.length) * 10) / 10 : 0;
+      const cocok = all.filter(r => (r.posisi_dilamar === "HRD" ? r.rating_hr : r.rating_accounting) >= 4).length;
+      stats.innerHTML = [
+        ["Total kandidat", all.length, "text-navy-900"],
+        ["Rata-rata akurasi", avg + "%", "text-brand-600"],
+        ["Cocok untuk posisinya (4-5 bintang)", cocok, "text-green-600"]
+      ].map(([l, v, c]) => `<div class="bg-white border border-slate-200 rounded-xl px-5 py-4"><div class="text-sm text-slate-500">${l}</div><div class="text-3xl font-extrabold ${c} mt-1">${v}</div></div>`).join("");
+
+      if (!rows.length) {
+        list.innerHTML = `<div class="bg-white border border-dashed border-slate-300 rounded-xl text-center py-14 px-4">
+          <p class="font-semibold text-navy-900">${all.length ? "Tidak ada kandidat yang cocok dengan pencarian" : "Belum ada kandidat yang menyelesaikan tes"}</p>
+          <p class="text-sm text-slate-500 mt-1">${all.length ? "Ubah kata kunci atau filter posisi." : "Hasil akan muncul di sini secara otomatis begitu peserta selesai mengerjakan tes."}</p></div>`;
+        return;
+      }
+
+      const dt = ts => ts ? new Date(ts).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "-";
+      const hrOf = r => r.rating_hr ?? calculateStars("HRD", r.skor_disc || {}, r.akurasi_kraepelin || 0, r.total_jawab_kraepelin);
+      const acOf = r => r.rating_accounting ?? calculateStars("Accounting", r.skor_disc || {}, r.akurasi_kraepelin || 0, r.total_jawab_kraepelin);
+
+      /* Tampilan tabel (layar lebar) */
+      const table = `<div class="hidden lg:block bg-white border border-slate-200 rounded-xl overflow-x-auto">
+        <table class="w-full text-left">
+          <thead class="bg-navy-900 text-white text-sm"><tr>
+            <th class="px-4 py-3 font-semibold">Nama</th><th class="px-4 py-3 font-semibold">Posisi dilamar</th>
+            <th class="px-4 py-3 font-semibold">Dominan DISC</th><th class="px-4 py-3 font-semibold">Skor ketelitian</th><th class="px-4 py-3 font-semibold">Tes logika</th><th class="px-4 py-3 font-semibold">IST &amp; PAPI</th>
+            <th class="px-4 py-3 font-semibold">Kecocokan</th><th class="px-2 py-3"></th></tr></thead>
+          <tbody class="divide-y divide-slate-100">
+            ${rows.map(r => `<tr class="align-top hover:bg-slate-50">
+              <td class="px-4 py-4"><div class="font-bold text-navy-900">${esc(r.nama)}</div><div class="text-xs text-slate-500 mt-0.5">${dt(r.timestamp)}</div></td>
+              <td class="px-4 py-4"><span class="inline-block rounded-full px-3 py-1 text-xs font-bold ${r.posisi_dilamar === "HRD" ? "bg-brand-100 text-brand-700" : "bg-accent-100 text-accent-600"}">${esc(r.posisi_dilamar)}</span></td>
+              <td class="px-4 py-4">${discBadge(r.skor_disc)}</td>
+              <td class="px-4 py-4">${accBlock(r)}</td>
+              <td class="px-4 py-4 min-w-[140px]">${cogBlock(r)}</td>
+              <td class="px-4 py-4 min-w-[170px]">${istPapiBlock(r)}</td>
+              <td class="px-4 py-4"><div class="grid grid-cols-2 gap-2 min-w-[380px]">${ratingBox("HRD", hrOf(r), r.posisi_dilamar === "HRD")}${ratingBox("Accounting", acOf(r), r.posisi_dilamar === "Accounting")}</div></td>
+              <td class="px-2 py-4"><button onclick="app.removeCandidate('${esc(r.id)}')" title="Hapus" aria-label="Hapus ${esc(r.nama)}" class="text-slate-400 hover:text-red-600 p-2">🗑</button></td>
+            </tr>`).join("")}
+          </tbody>
+        </table></div>`;
+
+      /* Tampilan kartu (mobile & tablet) */
+      const cards = `<div class="lg:hidden space-y-4">
+        ${rows.map(r => `<div class="bg-white border border-slate-200 rounded-xl p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div><div class="font-bold text-navy-900 text-lg">${esc(r.nama)}</div><div class="text-xs text-slate-500">${dt(r.timestamp)}</div></div>
+            <div class="flex items-center gap-1">
+              <span class="rounded-full px-3 py-1 text-xs font-bold ${r.posisi_dilamar === "HRD" ? "bg-brand-100 text-brand-700" : "bg-accent-100 text-accent-600"}">${esc(r.posisi_dilamar)}</span>
+              <button onclick="app.removeCandidate('${esc(r.id)}')" aria-label="Hapus ${esc(r.nama)}" class="text-slate-400 hover:text-red-600 p-1.5">🗑</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4 mt-4"><div><div class="text-xs text-slate-500 mb-1">Dominan DISC</div>${discBadge(r.skor_disc)}</div><div><div class="text-xs text-slate-500 mb-1">Skor ketelitian</div>${accBlock(r)}</div></div>
+          <div class="mt-4"><div class="text-xs text-slate-500 mb-1">Tes logika</div>${cogBlock(r)}</div>
+          <div class="mt-4"><div class="text-xs text-slate-500 mb-1">IST &amp; PAPI</div>${istPapiBlock(r)}</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">${ratingBox("HRD", hrOf(r), r.posisi_dilamar === "HRD")}${ratingBox("Accounting", acOf(r), r.posisi_dilamar === "Accounting")}</div>
+        </div>`).join("")}</div>`;
+
+      list.innerHTML = table + cards;
+    }
+
+    /* =====================================================================
+       8. INISIALISASI
+       ===================================================================== */
+    $("year").textContent = new Date().getFullYear();
+    if (!useFirebase) {
+      const b = $("mode-banner");
+      b.textContent = "Mode demo aktif: Firebase gagal diinisialisasi, data disimpan sementara di browser ini. Periksa firebaseConfig.";
+      b.classList.remove("hidden");
+    }
+    app.showTab("peserta");
+    renderPeserta();
+    startAdminListener(); // mulai mendengarkan data lebih awal agar dashboard langsung terisi
+  </script>
+</body>
+</html>
